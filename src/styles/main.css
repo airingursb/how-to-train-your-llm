@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #F5F0E8;
+  --text: #2D2D2D;
+  --text-muted: #888888;
+  --accent: #4A90D9;
+  --accent-light: rgba(74, 144, 217, 0.15);
+  --font-hand: 'Caveat', cursive;
+  --font-mono: 'JetBrains Mono', monospace;
+  --narrator-max-width: 680px;
+  --narrator-padding: 24px 32px;
+}
+
+[data-act="1"] { --accent: #4A90D9; }
+[data-act="2"] { --accent: #5BA55B; }
+[data-act="3"] { --accent: #E8913A; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: var(--font-hand);
+  color: var(--text);
+}
+
+#app {
+  width: 100%; height: 100%;
+  position: relative;
+}
+
+#stage {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: calc(100% - 50px);
+  z-index: 0;
+}
+
+#stage canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#landing-container {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: calc(100% - 50px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#landing-container.hidden { display: none; }
+
+#narrator-container {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  width: 100%;
+  z-index: 5;
+}
+
+#footer {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 50px;
+  background: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+#sound-toggle {
+  position: absolute;
+  left: 16px;
+  cursor: pointer;
+  color: var(--bg);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  user-select: none;
+}
+
+#progress-dots {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  opacity: 0.4;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.dot.active {
+  background: var(--bg);
+  opacity: 1;
+}
+
+.dot.completed {
+  background: var(--bg);
+  opacity: 0.7;
+}
