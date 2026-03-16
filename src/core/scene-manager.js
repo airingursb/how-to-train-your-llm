@@ -39,15 +39,20 @@ export class SceneManager {
       return
     }
 
-    const scene = this._scenes[this._sceneIndex]
+    const enterIndex = this._sceneIndex
+    const scene = this._scenes[enterIndex]
     this._bus.emit('scene:change', {
-      index: this._sceneIndex,
+      index: enterIndex,
       id: scene.id,
       total: this._scenes.length,
     })
 
     if (scene.enter) {
-      this._currentCtx = await scene.enter(this._appCtx)
+      const ctx = await scene.enter(this._appCtx)
+      // Only store context if scene hasn't been superseded by a reentrant advance
+      if (this._sceneIndex === enterIndex) {
+        this._currentCtx = ctx
+      }
     }
   }
 
