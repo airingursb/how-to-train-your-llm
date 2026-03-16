@@ -1,0 +1,33 @@
+{
+  "sentences": [
+    {
+      "tokens": ["The", "cat", "sat", "on", "the", "mat", "because", "it", "was", "tired"],
+      "queryToken": 7,
+      "queryWord": "it",
+      "correctAttention": [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      "explanation": "'it' refers to 'The cat' — a pronoun resolving to its subject. Attention connects 'it' to 'The' and 'cat'."
+    },
+    {
+      "tokens": ["She", "gave", "him", "the", "book", "that", "she", "had", "written"],
+      "queryToken": 5,
+      "queryWord": "that",
+      "correctAttention": [0, 0, 0, 0, 1, 0, 0, 0, 0],
+      "explanation": "'that' refers back to 'book' — a relative clause reference."
+    },
+    {
+      "tokens": ["The", "bank", "of", "the", "river", "was", "steep"],
+      "queryToken": 1,
+      "queryWord": "bank",
+      "correctAttention": [0, 0, 0, 0, 1, 0, 0],
+      "explanation": "'bank' attends to 'river' to disambiguate its meaning — river bank, not money bank."
+    }
+  ],
+  "multiHeadDemo": {
+    "sentence": ["The", "cat", "chased", "the", "mouse", "around", "the", "house"],
+    "heads": [
+      { "name": "Positional", "description": "Attends to nearby words", "pattern": "diagonal" },
+      { "name": "Subject-Verb", "description": "Connects subjects to their verbs", "links": [[1, 2], [4, 2]] },
+      { "name": "Coreference", "description": "Links related nouns", "links": [[1, 4]] }
+    ]
+  }
+}

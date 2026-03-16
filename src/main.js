@@ -9,6 +9,15 @@ import { Landing } from './landing.js'
 
 const CHAPTERS = [
   () => import('./chapters/ch00-magic-trick/index.js'),
+  () => import('./chapters/ch01-tokenization/index.js'),
+  () => import('./chapters/ch02-guessing-game/index.js'),
+  () => import('./chapters/ch03-attention/index.js'),
+  () => import('./chapters/ch04-transformer/index.js'),
+  () => import('./chapters/ch05-pretraining/index.js'),
+  () => import('./chapters/ch06-sft-motivation/index.js'),
+  () => import('./chapters/ch07-sft-process/index.js'),
+  () => import('./chapters/ch08-reward-model/index.js'),
+  () => import('./chapters/ch09-alignment/index.js'),
 ]
 
 async function boot() {

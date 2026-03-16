@@ -1,0 +1,21 @@
+{
+  "components": [
+    { "id": "embedding", "name": "Token Embedding", "description": "Convert each token into a vector of numbers", "color": "#4A90D9", "order": 1 },
+    { "id": "position", "name": "Positional Encoding", "description": "Add position info so the model knows word order", "color": "#5BA55B", "order": 2 },
+    { "id": "attention", "name": "Self-Attention", "description": "Each token looks at all others via Q/K/V", "color": "#8278B4", "order": 3 },
+    { "id": "residual1", "name": "Add & Normalize", "description": "Add the input back (residual) and normalize", "color": "#C88C3C", "order": 4 },
+    { "id": "ffn", "name": "Feed-Forward Network", "description": "Process each token through a small neural net", "color": "#D4645C", "order": 5 },
+    { "id": "residual2", "name": "Add & Normalize", "description": "Another residual connection and normalization", "color": "#C88C3C", "order": 6 }
+  ],
+  "tokenJourney": {
+    "token": "cat",
+    "steps": [
+      { "stage": "Input", "value": "\"cat\"", "description": "Raw text token" },
+      { "stage": "Embedding", "value": "[0.23, -0.91, 0.45, ...]", "description": "768-dimensional vector representing 'cat'" },
+      { "stage": "Position", "value": "[0.23+0.01, -0.91+0.99, ...]", "description": "Now it knows it's the 2nd token" },
+      { "stage": "Attention", "value": "[0.51, -0.33, 0.72, ...]", "description": "Enriched with info from 'The' (it's THE cat)" },
+      { "stage": "FFN", "value": "[0.68, -0.12, 0.89, ...]", "description": "Further processed — more abstract features" },
+      { "stage": "Output", "value": "→ next token probabilities", "description": "Ready to predict what comes after 'cat'" }
+    ]
+  }
+}

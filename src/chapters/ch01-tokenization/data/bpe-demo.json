@@ -1,0 +1,19 @@
+{
+  "trainingText": "the cat sat on the mat the cat",
+  "initialTokens": ["t","h","e"," ","c","a","t"," ","s","a","t"," ","o","n"," ","t","h","e"," ","m","a","t"," ","t","h","e"," ","c","a","t"],
+  "mergeSteps": [
+    { "pair": ["t","h"], "result": "th", "count": 3 },
+    { "pair": ["th","e"], "result": "the", "count": 3 },
+    { "pair": ["a","t"], "result": "at", "count": 3 },
+    { "pair": ["c","at"], "result": "cat", "count": 2 },
+    { "pair": ["s","at"], "result": "sat", "count": 1 },
+    { "pair": ["m","at"], "result": "mat", "count": 1 }
+  ],
+  "surprisingExamples": [
+    { "text": "unhappiness", "tokens": ["un", "h", "app", "iness"], "note": "\"happiness\" is split but \"app\" sneaks in!" },
+    { "text": "GPT-4", "tokens": ["G", "PT", "-", "4"], "note": "Numbers and punctuation get their own tokens" },
+    { "text": "🤖", "tokens": ["\\ud83e", "\\udd16"], "note": "Emojis become multiple byte tokens!" },
+    { "text": "tokenization", "tokens": ["token", "ization"], "note": "The model learns common suffixes" },
+    { "text": "  spaces", "tokens": ["  ", "spaces"], "note": "Leading spaces become their own token" }
+  ]
+}

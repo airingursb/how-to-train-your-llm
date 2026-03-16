@@ -1,0 +1,49 @@
+{
+  "rounds": [
+    {
+      "context": "The cat sat on the",
+      "bigramPrev": "the",
+      "options": ["mat", "dog", "sky", "the"],
+      "bigramChoice": "the",
+      "bigramProb": 0.15,
+      "correct": "mat",
+      "explanation": "Bigram only sees 'the' → picks most common follower. You saw the whole sentence about a cat sitting."
+    },
+    {
+      "context": "I like to eat ice",
+      "bigramPrev": "ice",
+      "options": ["cream", "cold", "skating", "age"],
+      "bigramChoice": "age",
+      "bigramProb": 0.22,
+      "correct": "cream",
+      "explanation": "Bigram sees 'ice' → 'age' is common in training data. You understood the context of eating."
+    },
+    {
+      "context": "The weather today is really",
+      "bigramPrev": "really",
+      "options": ["nice", "good", "the", "important"],
+      "bigramChoice": "important",
+      "bigramProb": 0.18,
+      "correct": "nice",
+      "explanation": "Bigram picks 'important' after 'really'. You used weather context to pick 'nice'."
+    },
+    {
+      "context": "She opened the door and",
+      "bigramPrev": "and",
+      "options": ["walked", "the", "a", "then"],
+      "bigramChoice": "the",
+      "bigramProb": 0.25,
+      "correct": "walked",
+      "explanation": "Bigram sees 'and' → 'the' is the most common follower globally. You understood the narrative flow."
+    },
+    {
+      "context": "To train a language model you need lots of",
+      "bigramPrev": "of",
+      "options": ["data", "the", "it", "money"],
+      "bigramChoice": "the",
+      "bigramProb": 0.30,
+      "correct": "data",
+      "explanation": "Bigram always loves 'the' after 'of'. You understood what language models need."
+    }
+  ]
+}

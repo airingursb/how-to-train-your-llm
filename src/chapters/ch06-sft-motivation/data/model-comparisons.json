@@ -1,0 +1,28 @@
+{
+  "comparisons": [
+    {
+      "prompt": "Write me a haiku about the ocean.",
+      "base": "The ocean is a vast body of water that covers about 71% of the Earth's surface. It is home to a diverse range of marine life, including fish, whales,",
+      "sft": "Waves crash on the shore,\nSalt mist rises to greet dawn —\nThe deep hums its song.",
+      "explanation": "The base model continues with encyclopedia-style text. The SFT model understands 'write me a haiku' means it should produce a poem in 5-7-5 format."
+    },
+    {
+      "prompt": "What's 2 + 2?",
+      "base": "2 + 2 = 4\n2 + 3 = 5\n2 + 4 = 6\n2 + 5 = 7\n2 + 6 = 8",
+      "sft": "2 + 2 = 4.",
+      "explanation": "The base model sees a pattern and keeps going. The SFT model answers the question and stops."
+    },
+    {
+      "prompt": "Explain quantum computing to a 5-year-old.",
+      "base": "Quantum computing is a type of computation that harnesses quantum mechanical phenomena such as superposition, interference, and entanglement to process information. Unlike classical",
+      "sft": "Imagine you have a magic coin. A normal coin is heads OR tails. But a magic quantum coin can be heads AND tails at the same time! Quantum computers use lots of these magic coins to solve really hard puzzles super fast.",
+      "explanation": "The base model gives a textbook definition. The SFT model adapts its language for a 5-year-old, using analogies."
+    },
+    {
+      "prompt": "I'm feeling sad today.",
+      "base": "I'm feeling sad today. I don't know why. I just feel like crying. I think it might be because of the weather. It's been raining all week and I",
+      "sft": "I'm sorry to hear that. It's okay to feel sad sometimes. Would you like to talk about what's bothering you? Sometimes sharing how we feel can help.",
+      "explanation": "The base model completes the story as if writing a diary entry. The SFT model recognizes this as someone seeking support and responds empathetically."
+    }
+  ]
+}

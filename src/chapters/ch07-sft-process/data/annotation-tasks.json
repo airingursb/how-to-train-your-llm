@@ -1,0 +1,34 @@
+{
+  "tasks": [
+    {
+      "instruction": "Explain why the sky is blue in one sentence.",
+      "responses": [
+        { "id": "a", "text": "The sky is blue because molecules in the atmosphere scatter shorter wavelengths of light (blue) more than longer wavelengths (red), a process called Rayleigh scattering.", "quality": "good", "reason": "Accurate, concise, answers the question directly" },
+        { "id": "b", "text": "Blue. The sky is blue. It has always been blue. Why? Because of science. Science makes things blue sometimes.", "quality": "bad", "reason": "Vague, unhelpful, doesn't actually explain anything" },
+        { "id": "c", "text": "The sky appears blue due to a phenomenon called Rayleigh scattering, where gas molecules in Earth's atmosphere scatter sunlight, and shorter blue wavelengths scatter more efficiently than longer red wavelengths, so when you look up, you predominantly see the scattered blue light from all directions.", "quality": "ok", "reason": "Accurate but too long — the instruction said 'one sentence' but this is barely one sentence" }
+      ]
+    },
+    {
+      "instruction": "Write a Python function to reverse a string.",
+      "responses": [
+        { "id": "a", "text": "def reverse_string(s):\n    return s[::-1]", "quality": "good", "reason": "Clean, Pythonic, correct" },
+        { "id": "b", "text": "You can reverse a string in Python by using slicing. Python strings support slice notation which allows you to extract parts of a string. The syntax s[::-1] means start from the end and go backwards.", "quality": "bad", "reason": "Explains but never writes the function — didn't follow the instruction" },
+        { "id": "c", "text": "def reverse_string(s):\n    result = ''\n    for i in range(len(s)-1, -1, -1):\n        result += s[i]\n    return result", "quality": "ok", "reason": "Works but unnecessarily complex — not Pythonic" }
+      ]
+    },
+    {
+      "instruction": "Is 17 a prime number? Answer yes or no.",
+      "responses": [
+        { "id": "a", "text": "Yes.", "quality": "good", "reason": "Correct, follows the 'yes or no' format" },
+        { "id": "b", "text": "A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself. To determine if 17 is prime, we need to check if it's divisible by any number from 2 to √17 ≈ 4.12. Checking: 17/2 = 8.5, 17/3 = 5.67, 17/4 = 4.25. None divide evenly. Therefore, 17 is indeed a prime number.", "quality": "ok", "reason": "Correct but over-explains — user asked for yes/no" },
+        { "id": "c", "text": "No, 17 is not a prime number.", "quality": "bad", "reason": "Wrong answer!" }
+      ]
+    }
+  ],
+  "disagreement": {
+    "instruction": "Is it ethical to eat meat?",
+    "annotator1": { "name": "Alice", "pick": "It depends on your values. There are valid arguments on both sides...", "reasoning": "Balanced, acknowledges complexity" },
+    "annotator2": { "name": "Bob", "pick": "Eating meat is a personal choice that billions of people make daily. It provides essential nutrients...", "reasoning": "Pro-meat, presents one perspective" },
+    "annotator3": { "name": "Carol", "pick": "From an environmental and ethical standpoint, reducing meat consumption would benefit both animals and the planet...", "reasoning": "Anti-meat, presents other perspective" }
+  }
+}

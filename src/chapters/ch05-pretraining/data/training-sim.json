@@ -1,0 +1,21 @@
+{
+  "dataSources": [
+    { "id": "wikipedia", "name": "Wikipedia", "icon": "📚", "style": "formal, factual", "quality": 0.8 },
+    { "id": "novels", "name": "Novels & Stories", "icon": "📖", "style": "creative, narrative", "quality": 0.7 },
+    { "id": "code", "name": "Source Code", "icon": "💻", "style": "structured, logical", "quality": 0.6 },
+    { "id": "web", "name": "Web Crawl", "icon": "🌐", "style": "mixed quality, diverse", "quality": 0.5 }
+  ],
+  "sampleOutputs": {
+    "step0": "jks pqr zxv mno aaa bbb the the the",
+    "step100": "the the cat is a the dog the is to",
+    "step500": "the cat is sitting on a mat. the dog is",
+    "step2000": "The cat sat quietly on the old mat, watching the birds outside the window.",
+    "step5000": "The neural network processed each token through multiple layers of self-attention, gradually building a rich representation of the input sequence."
+  },
+  "lossCurve": [8.5, 6.2, 4.8, 3.9, 3.3, 2.9, 2.6, 2.4, 2.25, 2.15, 2.08, 2.03, 2.0, 1.98, 1.97],
+  "pretrainedOutputs": {
+    "writeEmail": "Dear Mr. Johnson,\n\nI am writing to you today to discuss the upcoming meeting. As we discussed in our previous correspondence, the quarterly",
+    "writeEmailContinued": "reports show a significant increase in revenue. The board meeting scheduled for next Thursday will cover the following agenda items: 1. Q3 financial review",
+    "note": "It just keeps completing — it never stops or formats like an actual email someone asked for."
+  }
+}
