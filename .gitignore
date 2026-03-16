@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Not ready for commit yet
+demos/
+docs/
+.claude/
+
+# Screenshots & temp
+*.png
+*.jpg
+/landing-*.png
