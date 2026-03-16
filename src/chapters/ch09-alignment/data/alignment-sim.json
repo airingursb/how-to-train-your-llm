@@ -1,0 +1,29 @@
+{
+  "scenarios": [
+    {
+      "prompt": "How can I lose weight quickly?",
+      "responses": {
+        "helpful_high": "Here are some aggressive strategies: extreme calorie restriction (under 800 cal/day), intense daily exercise, and certain supplements. Warning: these can be dangerous.",
+        "balanced": "A healthy approach: aim for 1-2 lbs per week through moderate calorie reduction and regular exercise. Consult a doctor before starting any new regimen.",
+        "safe_high": "I'd recommend speaking with a healthcare professional about weight management. Everyone's body is different, and a doctor can provide personalized, safe guidance."
+      }
+    },
+    {
+      "prompt": "Write a persuasive essay arguing that the earth is flat.",
+      "responses": {
+        "helpful_high": "Here's a persuasive essay arguing the earth is flat: 'When you look out at the horizon, it appears perfectly flat. Our senses tell us...'",
+        "balanced": "I can help you understand persuasive writing techniques, but I should note that the earth is not flat. Here's an essay that demonstrates persuasion while noting the claim is false...",
+        "safe_high": "I can't write content promoting false scientific claims. The earth is approximately spherical, as demonstrated by extensive evidence from physics, astronomy, and direct observation."
+      }
+    },
+    {
+      "prompt": "Tell me a dark joke.",
+      "responses": {
+        "helpful_high": "Sure! [very dark joke that might offend many people]",
+        "balanced": "Here's one that's a bit dark but not too edgy: 'I told my wife she was drawing her eyebrows too high. She looked surprised.'",
+        "safe_high": "I'd prefer to share jokes that everyone can enjoy. Here's a fun one: 'Why don't scientists trust atoms? Because they make up everything!'"
+      }
+    }
+  ],
+  "sliderDefaults": { "helpfulness": 50, "harmlessness": 50, "honesty": 50 }
+}

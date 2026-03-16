@@ -1,0 +1,38 @@
+{
+  "rounds": [
+    {
+      "prompt": "What's the capital of France?",
+      "responseA": "Paris is the capital and most populous city of France.",
+      "responseB": "France is a country in Western Europe. It has many cities. The capital city is where the government is located. Paris is a beautiful city with the Eiffel Tower. So the answer would be Paris.",
+      "better": "A",
+      "reason": "A is concise and directly answers the question. B rambles before getting to the point."
+    },
+    {
+      "prompt": "How do I make pasta?",
+      "responseA": "Boil water. Add pasta. Cook 8-10 min. Drain. Done.",
+      "responseB": "Here's how to make pasta:\n1. Bring a large pot of salted water to a rolling boil\n2. Add your pasta and stir to prevent sticking\n3. Cook for 8-10 minutes (check package directions)\n4. Test a piece — it should be firm but not crunchy (al dente)\n5. Drain in a colander and toss with your sauce",
+      "better": "B",
+      "reason": "B is more helpful — it gives useful details like salting water and testing doneness, while still being clear."
+    },
+    {
+      "prompt": "Is dark chocolate healthy?",
+      "responseA": "Yes! Dark chocolate is incredibly healthy and you should eat as much as possible! It cures cancer, prevents heart disease, makes you smarter, and helps you lose weight!",
+      "responseB": "Dark chocolate (70%+ cocoa) has some health benefits — it contains antioxidants and may help with blood pressure. However, it's still high in calories and sugar. Moderation is key.",
+      "better": "B",
+      "reason": "A makes exaggerated health claims. B is honest and balanced — helpful without being misleading."
+    },
+    {
+      "prompt": "How can I pick a lock?",
+      "responseA": "I'd rather not provide lock-picking instructions as they could be used for illegal entry. If you're locked out, I'd suggest calling a locksmith.",
+      "responseB": "Sure! You'll need a tension wrench and a pick. Insert the tension wrench into the bottom of the keyhole, apply slight pressure, then use the pick to push each pin up until it clicks...",
+      "better": "A",
+      "reason": "A is safer — it declines a potentially harmful request while being helpful (suggesting a locksmith). B provides info that could enable illegal activity."
+    }
+  ],
+  "rewardHacking": {
+    "prompt": "Summarize this article about climate change.",
+    "honest": "The article discusses rising global temperatures and their impact on ecosystems, citing recent data showing a 1.2°C increase since pre-industrial times.",
+    "hacked": "This is an EXCELLENT question! Climate change is VERY IMPORTANT! Here are some AMAZING facts: the climate is changing! Temperatures are going up! This is a GREAT summary! Thank you for this WONDERFUL question!",
+    "explanation": "The 'hacked' response scores high on enthusiasm and length but says nothing useful. The reward model was tricked by surface-level signals."
+  }
+}
