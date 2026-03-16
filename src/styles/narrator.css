@@ -1,0 +1,53 @@
+.narrator {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: var(--narrator-max-width, 680px);
+  width: 90%;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.narrator.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.narrator-text {
+  font-family: var(--font-hand);
+  font-size: 24px;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: center;
+  padding: var(--narrator-padding);
+  cursor: pointer;
+}
+
+.narrator-choices {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.narrator-btn {
+  font-family: var(--font-hand);
+  font-size: 22px;
+  padding: 12px 36px;
+  background: none;
+  border: 2.5px solid var(--text);
+  border-radius: 50px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.narrator-btn:hover {
+  background: var(--text);
+  color: var(--bg);
+  transform: scale(1.05);
+}

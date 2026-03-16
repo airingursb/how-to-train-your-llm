@@ -1,0 +1,24 @@
+{
+  "landing": {
+    "title": "How to Train Your LLM",
+    "subtitle": "an interactive guide to building a language model from scratch",
+    "start": "let's begin →"
+  },
+  "ch00": {
+    "title": "The Magic Trick",
+    "s01_text": "You've probably used ChatGPT. You type something, it types back. Feels like magic, right?",
+    "s01_btn": "Show me the magic →",
+    "s02_prompt_label": "Type anything:",
+    "s02_prompt_placeholder": "Once upon a time...",
+    "s02_generate": "Generate →",
+    "s02_generating": "Generating...",
+    "s03_text": "Impressive, right? But here's the thing — there's no magic here. Just math, data, and a clever trick called \"predict the next word.\"",
+    "s04_text": "Over the next chapters, we're going to build one of these from scratch. You'll see every piece, touch every gear.",
+    "s04_text2": "By the end, you'll know exactly how it works — because you'll have built it yourself.",
+    "s04_btn": "Let's start building →"
+  },
+  "ui": {
+    "sound_on": "ON",
+    "sound_off": "OFF"
+  }
+}
