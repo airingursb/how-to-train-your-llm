@@ -1,0 +1,31 @@
+{
+  "completions": [
+    {
+      "prompt": "Once upon a time",
+      "output": ", in a land where machines could dream, there lived a small program that wanted to understand stories. It didn't know any words yet — just numbers. But it had a plan: read everything, and learn to predict what comes next."
+    },
+    {
+      "prompt": "The meaning of life is",
+      "output": " a question that philosophers have debated for millennia. But perhaps the answer isn't a destination — it's the search itself. Each generation builds on the last, reaching for understanding like a neural network refining its weights, getting a little closer with every pass."
+    },
+    {
+      "prompt": "In the year 2050, AI will",
+      "output": " likely be so deeply woven into daily life that we'll forget it's there — like electricity or the internet before it. The interesting question isn't what AI will do, but what we'll choose to do with it."
+    },
+    {
+      "prompt": "The secret to good writing is",
+      "output": " rewriting. First drafts are for getting ideas out of your head and onto the page. Second drafts are for making those ideas make sense. Third drafts are for making them sing. Language models skip all this — they write once, left to right, no going back."
+    },
+    {
+      "prompt": "Tell me a joke about",
+      "output": " neural networks: Why did the neural network go to therapy? Because it had too many layers of issues, kept losing its gradients, and couldn't figure out its bias."
+    },
+    {
+      "prompt": "Scientists recently discovered that",
+      "output": " large language models develop unexpected abilities as they scale up — abilities that weren't explicitly trained. They call this \"emergence.\" A model trained only to predict the next word somehow learns to reason, translate, and even write code. Nobody fully understands why."
+    }
+  ],
+  "fallback": {
+    "output": " — and that's where the magic begins. A language model takes your words and continues the story, one token at a time. It doesn't think, doesn't understand. It just predicts: given everything so far, what word is most likely to come next?"
+  }
+}
