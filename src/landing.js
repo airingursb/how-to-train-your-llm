@@ -128,11 +128,14 @@ class TokenNode {
 // ─── Landing ──────────────────────────────────────────────────────────────────
 
 export class Landing {
-  constructor(container, engine, i18n) {
+  constructor(container, engine, i18n, state) {
     this._container = container;
     // engine is intentionally unused — landing uses its own raw canvas
     this._i18n      = i18n;
+    this._state     = state;
     this.onStart    = null;
+    this.onContinue = null;
+    this.onRestart  = null;
 
     // Animation state
     this._nodes       = [];
@@ -255,36 +258,114 @@ export class Landing {
     subtitle.textContent = subtitleText;
     this._overlay.appendChild(subtitle);
 
-    // Start button
-    const btnText = this._i18n ? this._i18n.t('landing.start') : "let's begin →";
-    const btn = document.createElement('button');
-    Object.assign(btn.style, {
-      pointerEvents: 'all',
-      fontFamily: "'Caveat', cursive",
-      fontSize: '28px',
-      padding: '14px 48px',
-      background: 'none',
-      border: '3px solid #2D2D2D',
-      borderRadius: '50px',
-      color: '#2D2D2D',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    });
-    btn.textContent = btnText;
-    btn.addEventListener('mouseenter', () => {
-      btn.style.background = '#2D2D2D';
-      btn.style.color      = '#F5F0E8';
-      btn.style.transform  = 'scale(1.05)';
-    });
-    btn.addEventListener('mouseleave', () => {
-      btn.style.background = 'none';
-      btn.style.color      = '#2D2D2D';
-      btn.style.transform  = 'scale(1)';
-    });
-    btn.addEventListener('click', () => {
-      this.onStart?.();
-    });
-    this._overlay.appendChild(btn);
+    // Button section — varies based on progress
+    const CHAPTER_IDS = ['ch00','ch01','ch02','ch03','ch04','ch05','ch06','ch07','ch08','ch09'];
+    const completed   = this._state ? this._state.getCompletedChapters() : [];
+    const allDone     = completed.length >= CHAPTER_IDS.length;
+    const hasProg     = completed.length > 0;
+
+    const makeBtn = (text, primary) => {
+      const b = document.createElement('button');
+      Object.assign(b.style, {
+        pointerEvents: 'all',
+        fontFamily: "'Caveat', cursive",
+        fontSize: primary ? '28px' : '20px',
+        padding: primary ? '14px 48px' : '8px 32px',
+        background: 'none',
+        border: primary ? '3px solid #2D2D2D' : '2px solid #999',
+        borderRadius: '50px',
+        color: primary ? '#2D2D2D' : '#888',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        marginTop: primary ? '0' : '16px',
+      });
+      b.textContent = text;
+      const hoverBg    = primary ? '#2D2D2D' : '#888';
+      const hoverColor = '#F5F0E8';
+      b.addEventListener('mouseenter', () => {
+        b.style.background = hoverBg;
+        b.style.color      = hoverColor;
+        b.style.transform  = 'scale(1.05)';
+      });
+      b.addEventListener('mouseleave', () => {
+        b.style.background = 'none';
+        b.style.color      = primary ? '#2D2D2D' : '#888';
+        b.style.transform  = 'scale(1)';
+      });
+      return b;
+    };
+
+    if (allDone) {
+      // Completion screen
+      const completeTitle = this._i18n ? this._i18n.t('landing.complete_title') : 'Congratulations!';
+      const completeText  = this._i18n ? this._i18n.t('landing.complete_text')  : "You've completed How to Train Your LLM!";
+      const playAgainText = this._i18n ? this._i18n.t('landing.play_again')     : 'play again →';
+
+      const congrats = document.createElement('div');
+      Object.assign(congrats.style, {
+        fontFamily: "'Caveat', cursive",
+        fontSize: 'clamp(28px, 4vw, 42px)',
+        fontWeight: '700',
+        color: '#2D2D2D',
+        textAlign: 'center',
+        marginBottom: '12px',
+        pointerEvents: 'none',
+      });
+      congrats.textContent = completeTitle;
+      this._overlay.appendChild(congrats);
+
+      const completeMsg = document.createElement('div');
+      Object.assign(completeMsg.style, {
+        fontFamily: "'Caveat', cursive",
+        fontSize: 'clamp(16px, 2vw, 22px)',
+        color: '#888',
+        textAlign: 'center',
+        marginBottom: '32px',
+        maxWidth: '520px',
+        pointerEvents: 'none',
+      });
+      completeMsg.textContent = completeText;
+      this._overlay.appendChild(completeMsg);
+
+      const playAgainBtn = makeBtn(playAgainText, true);
+      playAgainBtn.addEventListener('click', () => {
+        this.onRestart?.();
+      });
+      this._overlay.appendChild(playAgainBtn);
+    } else if (hasProg) {
+      // Find the last completed chapter index and suggest next
+      let lastIdx = -1;
+      for (const id of completed) {
+        const idx = CHAPTER_IDS.indexOf(id);
+        if (idx > lastIdx) lastIdx = idx;
+      }
+      const nextIdx = Math.min(lastIdx + 1, CHAPTER_IDS.length - 1);
+      const chNum   = nextIdx + 1; // 1-based display number
+      const continueText = this._i18n
+        ? this._i18n.t('landing.continue', { n: chNum })
+        : `continue from chapter ${chNum} →`;
+      const restartText = this._i18n ? this._i18n.t('landing.restart') : 'start over →';
+
+      const continueBtn = makeBtn(continueText, true);
+      continueBtn.addEventListener('click', () => {
+        this.onContinue?.();
+      });
+      this._overlay.appendChild(continueBtn);
+
+      const restartBtn = makeBtn(restartText, false);
+      restartBtn.addEventListener('click', () => {
+        this.onRestart?.();
+      });
+      this._overlay.appendChild(restartBtn);
+    } else {
+      // Fresh start
+      const btnText = this._i18n ? this._i18n.t('landing.start') : "let's begin →";
+      const btn = makeBtn(btnText, true);
+      btn.addEventListener('click', () => {
+        this.onStart?.();
+      });
+      this._overlay.appendChild(btn);
+    }
 
     // Event listeners
     window.addEventListener('resize',     this._boundResize);

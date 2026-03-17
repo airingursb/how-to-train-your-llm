@@ -2,7 +2,12 @@
   "landing": {
     "title": "如何训练你的 LLM",
     "subtitle": "从零开始构建语言模型的互动指南",
-    "start": "开始旅程 →"
+    "start": "开始旅程 →",
+    "continue": "从第 {{n}} 章继续 →",
+    "restart": "从头开始 →",
+    "complete_title": "恭喜！",
+    "complete_text": "你已完成「如何训练你的 LLM」！",
+    "play_again": "再玩一次 →"
   },
   "ch00": {
     "title": "魔术表演",

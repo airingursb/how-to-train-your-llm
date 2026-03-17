@@ -7,6 +7,8 @@ import { AudioManager } from './core/audio.js'
 import { SceneManager } from './core/scene-manager.js'
 import { Landing } from './landing.js'
 
+const CHAPTER_IDS = ['ch00','ch01','ch02','ch03','ch04','ch05','ch06','ch07','ch08','ch09']
+
 const CHAPTERS = [
   () => import('./chapters/ch00-magic-trick/index.js'),
   () => import('./chapters/ch01-tokenization/index.js'),
@@ -50,9 +52,12 @@ async function boot() {
   const landing = new Landing(
     document.getElementById('landing-container'),
     engine,
-    i18n
+    i18n,
+    state
   )
-  landing.onStart = () => bus.emit('game:start')
+  landing.onStart    = () => bus.emit('game:start')
+  landing.onContinue = () => bus.emit('game:continue')
+  landing.onRestart  = () => bus.emit('game:restart')
   landing.show()
 
   // 8. Wire events
@@ -61,10 +66,29 @@ async function boot() {
     await startChapter(0, ctx)
   })
 
-  bus.on('chapter:complete', (chapterId) => {
+  bus.on('game:continue', async () => {
+    landing.hide()
+    const startIndex = state.getSetting('lastChapter') || 0
+    await startChapter(startIndex, ctx)
+  })
+
+  bus.on('game:restart', async () => {
+    landing.hide()
+    await startChapter(0, ctx)
+  })
+
+  bus.on('chapter:complete', async (chapterId) => {
     state.completeChapter(chapterId)
     narrator.clear()
-    landing.show()
+
+    const currentIndex = CHAPTER_IDS.indexOf(chapterId)
+    if (currentIndex < CHAPTER_IDS.length - 1) {
+      // Auto-advance to next chapter
+      await startChapter(currentIndex + 1, ctx)
+    } else {
+      // Final chapter — return to landing (which will show completion screen)
+      landing.show()
+    }
   })
 
   bus.on('scene:advance', () => {
@@ -122,6 +146,7 @@ async function boot() {
 }
 
 async function startChapter(index, ctx) {
+  ctx.state.setSetting('lastChapter', index)
   const module = await CHAPTERS[index]()
   const chapter = module.default
   ctx.sceneManager.loadChapter(chapter, {
