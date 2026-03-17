@@ -1,3 +1,5 @@
+import { createSplitView } from '../../helpers/split-view.js'
+import { createPredictionGame } from '../../helpers/prediction-game.js'
 import bpeData from './data/bpe-demo.json'
 
 // Token color palette — cycles through these for variety
@@ -9,244 +11,273 @@ const TOKEN_COLORS = [
   { bg: 'rgba(220,160,50,0.15)', border: '#DCA032' },
 ]
 
-function tokenColor(index) {
-  return TOKEN_COLORS[index % TOKEN_COLORS.length]
-}
-
-function injectPulseStyle() {
-  if (document.getElementById('ch01-pulse-style')) return
-  const style = document.createElement('style')
-  style.id = 'ch01-pulse-style'
-  style.textContent = `
-    @keyframes ch01-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(74,144,217,0.6); }
-      70%  { box-shadow: 0 0 0 8px rgba(74,144,217,0); }
-      100% { box-shadow: 0 0 0 0 rgba(74,144,217,0); }
-    }
-    .ch01-token-highlight {
-      animation: ch01-pulse 1.2s infinite;
-      cursor: pointer;
-    }
-    .ch01-token-highlight:hover {
-      transform: scale(1.08);
-      transition: transform 0.1s;
-    }
-  `
-  document.head.appendChild(style)
-}
+function tokenColor(i) { return TOKEN_COLORS[i % TOKEN_COLORS.length] }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 export default [
-  // ─── Scene 1: Narrative hook ──────────────────────────────────────────────
+  // ─── Scene 1: Character Split [Split-View] ────────────────────────────────
   {
-    id: 'ch01-s01-hook',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch01.s01_text')
-      await ctx.narrator.ask('ch01.s01_text', [
-        { key: 'ch01.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ─── Scene 2: Character-level view ───────────────────────────────────────
-  {
-    id: 'ch01-s02-chars',
+    id: 'ch01-s01-chars',
     type: 'interactive',
     async enter(ctx) {
-      injectPulseStyle()
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
 
-      const wrapper = document.createElement('div')
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; text-align: center; width: 90%; max-width: 700px;
-      `
+      const sentence = bpeData.trainingText
+      const chars = sentence.split('')
 
-      // Narrator text above the demo
-      const narText = document.createElement('div')
-      narText.textContent = ctx.i18n.t('ch01.s02_text')
-      narText.style.cssText = `
-        font-family: var(--font-hand); font-size: 22px; color: var(--text);
-        margin-bottom: 32px; line-height: 1.5;
-      `
-      wrapper.appendChild(narText)
-
-      const word = 'the cat'
-      const chars = word.split('')
-      const charCodes = chars.map(c => c.charCodeAt(0))
-
-      // Character boxes row
-      const charRow = document.createElement('div')
-      charRow.style.cssText = `display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px;`
-
-      chars.forEach((ch, i) => {
-        const col = tokenColor(i)
-        const box = document.createElement('div')
-        box.style.cssText = `
-          background: ${col.bg}; border: 2px solid ${col.border};
-          border-radius: 8px; padding: 8px 12px;
-          font-family: var(--font-mono); font-size: 20px; color: var(--text);
-          min-width: 36px; text-align: center;
-        `
-        box.textContent = ch === ' ' ? '␣' : ch
-        charRow.appendChild(box)
+      // Each char has position, target position, velocity
+      const cols = 15
+      const tiles = chars.map((ch, i) => {
+        const row = Math.floor(i / cols)
+        const col = i % cols
+        return {
+          char: ch,
+          // Start position: center (normalized 0..1)
+          x: 0.5, y: 0.4,
+          // Target: spread out in grid
+          tx: 0.1 + (col / cols) * 0.8,
+          ty: 0.2 + row * 0.12,
+          vx: 0, vy: 0,
+          color: tokenColor(i),
+        }
       })
-      wrapper.appendChild(charRow)
 
-      // Arrow
-      const arrow = document.createElement('div')
-      arrow.textContent = '↓'
-      arrow.style.cssText = `font-size: 28px; color: var(--accent); margin: 8px 0;`
-      wrapper.appendChild(arrow)
+      let exploding = false
 
-      // Number boxes row
-      const numRow = document.createElement('div')
-      numRow.style.cssText = `display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px;`
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      charCodes.forEach((code, i) => {
-        const col = tokenColor(i)
-        const box = document.createElement('div')
-        box.style.cssText = `
-          background: ${col.bg}; border: 2px solid ${col.border};
-          border-radius: 8px; padding: 8px 12px;
-          font-family: var(--font-mono); font-size: 18px; color: var(--text);
-          min-width: 36px; text-align: center;
-        `
-        box.textContent = code
-        numRow.appendChild(box)
-      })
-      wrapper.appendChild(numRow)
+        // Title
+        c.font = 'bold 18px JetBrains Mono, monospace'
+        c.fillStyle = '#888'
+        c.textAlign = 'center'
+        c.fillText('"' + sentence + '"', w / 2, 40)
 
-      // Advance button
+        // Draw tiles
+        c.font = '16px JetBrains Mono, monospace'
+        tiles.forEach(tile => {
+          if (exploding) {
+            // Spring physics toward target
+            const dx = tile.tx - tile.x
+            const dy = tile.ty - tile.y
+            tile.vx += dx * 0.08
+            tile.vy += dy * 0.08
+            tile.vx *= 0.85
+            tile.vy *= 0.85
+            tile.x += tile.vx
+            tile.y += tile.vy
+          }
+
+          const px = tile.x * w
+          const py = tile.y * h
+          const size = 28
+
+          // Box background
+          c.fillStyle = tile.color.bg
+          c.fillRect(px - size / 2, py - size / 2, size, size)
+          // Box border
+          c.strokeStyle = tile.color.border
+          c.lineWidth = 1.5
+          c.strokeRect(px - size / 2, py - size / 2, size, size)
+
+          // Character label
+          c.fillStyle = '#2D2D2D'
+          c.textAlign = 'center'
+          c.textBaseline = 'middle'
+          c.fillText(tile.char === ' ' ? '·' : tile.char, px, py)
+        })
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // Right panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch01.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch01.s01_text')
+      sv.panel.appendChild(desc)
+
       const btn = document.createElement('button')
-      btn.textContent = ctx.i18n.t('ch01.s02_btn')
-      btn.className = 'narrator-btn'
-      btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
-      wrapper.appendChild(btn)
+      btn.className = 'scene-btn'
+      btn.textContent = ctx.i18n.t('ch01.s01_btn')
+      btn.addEventListener('click', async () => {
+        exploding = true
+        btn.remove()
+        await sleep(1500)
 
-      document.getElementById('app').appendChild(wrapper)
-      return { wrapper }
+        const desc2 = document.createElement('p')
+        desc2.textContent = ctx.i18n.t('ch01.s02_text')
+        desc2.className = 'fade-in'
+        sv.panel.appendChild(desc2)
+
+        const btn2 = document.createElement('button')
+        btn2.className = 'scene-btn fade-in'
+        btn2.textContent = ctx.i18n.t('ch01.s02_btn')
+        btn2.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+        sv.panel.appendChild(btn2)
+      })
+      sv.panel.appendChild(btn)
+
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // ─── Scene 3: BPE puzzle ──────────────────────────────────────────────────
+  // ─── Scene 2: BPE Merge Puzzle [Split-View + Direct Manipulation] ─────────
   {
-    id: 'ch01-s03-bpe',
+    id: 'ch01-s02-bpe',
     type: 'interactive',
     async enter(ctx) {
-      injectPulseStyle()
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
 
       const { mergeSteps, initialTokens } = bpeData
       let tokens = [...initialTokens]
       let mergeIndex = 0
       let done = false
 
-      const wrapper = document.createElement('div')
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%);
-        z-index: 15; text-align: center; width: 92%; max-width: 750px;
-      `
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      // Narrator instruction
-      const narText = document.createElement('div')
-      narText.textContent = ctx.i18n.t('ch01.s03_text')
-      narText.style.cssText = `
-        font-family: var(--font-hand); font-size: 20px; color: var(--text);
-        margin-bottom: 24px; line-height: 1.5;
-      `
-      wrapper.appendChild(narText)
+        if (done) {
+          // Show final tokens in a flow layout
+          c.font = 'bold 16px JetBrains Mono, monospace'
+          c.textAlign = 'center'
+          c.fillStyle = '#888'
+          c.fillText('Final tokens:', w / 2, 40)
 
-      // Merge counter
+          c.font = '15px JetBrains Mono, monospace'
+          let x = 30, y = 70
+          tokens.forEach((tok, i) => {
+            const col = tokenColor(i)
+            const label = tok === ' ' ? '·' : tok
+            const tw = c.measureText(label).width + 16
+            if (x + tw > w - 20) { x = 30; y += 40 }
+            c.fillStyle = col.bg
+            c.fillRect(x, y, tw, 30)
+            c.strokeStyle = col.border
+            c.lineWidth = 1.5
+            c.strokeRect(x, y, tw, 30)
+            c.fillStyle = '#2D2D2D'
+            c.textAlign = 'center'
+            c.fillText(label, x + tw / 2, y + 20)
+            c.textAlign = 'left'
+            x += tw + 6
+          })
+        } else {
+          // Compression counter
+          c.font = 'bold 14px JetBrains Mono, monospace'
+          c.fillStyle = '#4A90D9'
+          c.textAlign = 'left'
+          c.fillText(`${initialTokens.length} → ${tokens.length} tokens`, 20, 22)
+
+          // Show current tokens; highlight the mergeable pair
+          const step = mergeSteps[mergeIndex]
+          const [pA, pB] = step ? step.pair : ['', '']
+
+          c.font = '15px JetBrains Mono, monospace'
+          let x = 20, y = 48
+
+          tokens.forEach((tok, i) => {
+            const isPairA = step && i < tokens.length - 1 && tokens[i] === pA && tokens[i + 1] === pB
+            const isPairB = step && i > 0 && tokens[i - 1] === pA && tokens[i] === pB
+            const isGlow = isPairA || isPairB
+
+            const label = tok === ' ' ? '·' : tok
+            const tw = c.measureText(label).width + 14
+            if (x + tw > w - 20) { x = 20; y += 38 }
+
+            if (isGlow) {
+              // Pulsing glow effect
+              const t = Date.now() / 600
+              const glow = 0.5 + Math.sin(t) * 0.3
+              c.fillStyle = `rgba(74, 144, 217, ${glow * 0.3})`
+              c.fillRect(x - 3, y - 3, tw + 6, 34)
+              c.strokeStyle = '#4A90D9'
+              c.lineWidth = 2.5
+            } else {
+              const col = tokenColor(i)
+              c.fillStyle = col.bg
+              c.strokeStyle = col.border
+              c.lineWidth = 1
+            }
+
+            c.fillRect(x, y, tw, 28)
+            c.strokeRect(x, y, tw, 28)
+            c.fillStyle = '#2D2D2D'
+            c.textAlign = 'center'
+            c.fillText(label, x + tw / 2, y + 19)
+            c.textAlign = 'left'
+            x += tw + 4
+          })
+        }
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // Right panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch01.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch01.s03_text')
+      sv.panel.appendChild(desc)
+
       const counter = document.createElement('div')
-      counter.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--accent);
-        margin-bottom: 16px;
-      `
+      counter.className = 'score-badge'
+      counter.style.marginBottom = '12px'
+      sv.panel.appendChild(counter)
 
-      function updateCounter() {
+      const statusEl = document.createElement('p')
+      statusEl.style.cssText = 'font-size: 16px; color: var(--text-muted); min-height: 40px;'
+      sv.panel.appendChild(statusEl)
+
+      const mergeBtn = document.createElement('button')
+      mergeBtn.className = 'scene-btn glow-pulse'
+      mergeBtn.textContent = 'Merge! →'
+      sv.panel.appendChild(mergeBtn)
+
+      function updatePanel() {
         const tpl = ctx.i18n.t('ch01.s03_merge_counter')
         counter.textContent = tpl
           .replace('{{current}}', mergeIndex)
           .replace('{{total}}', mergeSteps.length)
-      }
-      updateCounter()
-      wrapper.appendChild(counter)
 
-      // Token display area
-      const tokenArea = document.createElement('div')
-      tokenArea.style.cssText = `
-        display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
-        padding: 20px; background: rgba(45,45,45,0.04);
-        border-radius: 16px; margin-bottom: 24px; min-height: 80px;
-      `
-      wrapper.appendChild(tokenArea)
-
-      // Status line (shows "click the highlighted pair")
-      const statusLine = document.createElement('div')
-      statusLine.style.cssText = `
-        font-family: var(--font-hand); font-size: 16px; color: var(--text);
-        opacity: 0.7; min-height: 24px; margin-bottom: 12px;
-      `
-      wrapper.appendChild(statusLine)
-
-      document.getElementById('app').appendChild(wrapper)
-
-      function renderTokens() {
-        tokenArea.innerHTML = ''
-
-        if (done) return
-
-        const step = mergeSteps[mergeIndex]
-        if (!step) return
-
-        const [pA, pB] = step.pair
-
-        // Find all positions where pair appears consecutively
-        const pairPositions = new Set()
-        for (let i = 0; i < tokens.length - 1; i++) {
-          if (tokens[i] === pA && tokens[i + 1] === pB) {
-            pairPositions.add(i)
-          }
+        if (!done && mergeIndex < mergeSteps.length) {
+          const step = mergeSteps[mergeIndex]
+          statusEl.textContent = `"${step.pair[0]}" + "${step.pair[1]}" → "${step.result}" (×${step.count})`
+          mergeBtn.style.display = ''
+        } else {
+          statusEl.textContent = ''
+          mergeBtn.style.display = 'none'
         }
-
-        statusLine.textContent = pairPositions.size > 0
-          ? `Most common pair: "${pA}" + "${pB}" (appears ${step.count}×) — click to merge!`
-          : ''
-
-        tokens.forEach((tok, i) => {
-          const isHighlightA = pairPositions.has(i)
-          const isHighlightB = pairPositions.has(i - 1)
-          const isHighlighted = isHighlightA || isHighlightB
-
-          const col = isHighlighted
-            ? { bg: 'rgba(74,144,217,0.25)', border: '#4A90D9' }
-            : tokenColor(tok.length % TOKEN_COLORS.length)
-
-          const box = document.createElement('div')
-          box.style.cssText = `
-            background: ${col.bg}; border: 2px solid ${col.border};
-            border-radius: 8px; padding: 8px 12px;
-            font-family: var(--font-mono); font-size: 16px; color: var(--text);
-            min-width: 28px; text-align: center; user-select: none;
-          `
-          box.textContent = tok === ' ' ? '·' : tok
-
-          if (isHighlighted) {
-            box.classList.add('ch01-token-highlight')
-            box.addEventListener('click', () => doMerge())
-          }
-
-          tokenArea.appendChild(box)
-        })
       }
 
-      function doMerge() {
-        if (mergeIndex >= mergeSteps.length || done) return
+      mergeBtn.addEventListener('click', () => {
+        if (done || mergeIndex >= mergeSteps.length) return
         const step = mergeSteps[mergeIndex]
         const [pA, pB] = step.pair
         const newTokens = []
@@ -262,179 +293,174 @@ export default [
         }
         tokens = newTokens
         mergeIndex++
-        updateCounter()
 
         if (mergeIndex >= mergeSteps.length) {
           done = true
-          tokenArea.innerHTML = ''
-          statusLine.textContent = ''
-
-          // Show completion message
           const completeTpl = ctx.i18n.t('ch01.s03_complete')
-          const completeMsg = document.createElement('div')
-          completeMsg.textContent = completeTpl
+          const msg = document.createElement('p')
+          msg.className = 'fade-in'
+          msg.textContent = completeTpl
             .replace('{{charCount}}', initialTokens.length)
             .replace('{{tokenCount}}', tokens.length)
-          completeMsg.style.cssText = `
-            font-family: var(--font-hand); font-size: 20px; color: var(--text);
-            line-height: 1.6; padding: 20px;
-          `
-          tokenArea.style.justifyContent = 'center'
-          tokenArea.style.alignItems = 'center'
-          tokenArea.appendChild(completeMsg)
+          sv.panel.appendChild(msg)
 
-          // Show final token list
-          const finalRow = document.createElement('div')
-          finalRow.style.cssText = `display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 16px;`
-          tokens.forEach((tok, i) => {
-            const col = tokenColor(i)
-            const box = document.createElement('div')
-            box.style.cssText = `
-              background: ${col.bg}; border: 2px solid ${col.border};
-              border-radius: 8px; padding: 8px 12px;
-              font-family: var(--font-mono); font-size: 16px; color: var(--text);
-              min-width: 28px; text-align: center;
-            `
-            box.textContent = tok === ' ' ? '·' : tok
-            finalRow.appendChild(box)
-          })
-          tokenArea.appendChild(finalRow)
-
-          // Advance button
-          const btn = document.createElement('button')
-          btn.textContent = ctx.i18n.t('ch01.s03_btn')
-          btn.className = 'narrator-btn'
-          btn.style.marginTop = '16px'
-          btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
-          wrapper.appendChild(btn)
-        } else {
-          renderTokens()
+          const advBtn = document.createElement('button')
+          advBtn.className = 'scene-btn fade-in'
+          advBtn.textContent = ctx.i18n.t('ch01.s03_btn')
+          advBtn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+          sv.panel.appendChild(advBtn)
         }
-      }
+        updatePanel()
+      })
 
-      renderTokens()
-      return { wrapper }
+      updatePanel()
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // ─── Scene 4: "BUT" reversal — surprising tokenization ───────────────────
+  // ─── Scene 3: Surprising Tokens [Split-View + Prediction Game] ────────────
   {
-    id: 'ch01-s04-but',
+    id: 'ch01-s03-surprising',
     type: 'interactive',
     async enter(ctx) {
-      injectPulseStyle()
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let currentWord = null
+      let currentTokens = []
+      let animFrame = null
 
-      const { surprisingExamples } = bpeData
-      let exampleIndex = 0
+      function drawTokenBoundaries() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      const wrapper = document.createElement('div')
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; text-align: center; width: 90%; max-width: 680px;
-      `
+        if (currentWord && currentTokens.length > 0) {
+          // Label
+          c.font = '14px JetBrains Mono, monospace'
+          c.fillStyle = '#888'
+          c.textAlign = 'center'
+          c.fillText('Token boundaries:', w / 2, h * 0.3)
 
-      // Intro text
-      const narText = document.createElement('div')
-      narText.textContent = ctx.i18n.t('ch01.s04_text')
-      narText.style.cssText = `
-        font-family: var(--font-hand); font-size: 22px; color: var(--text);
-        margin-bottom: 32px; line-height: 1.5;
-      `
-      wrapper.appendChild(narText)
+          // Draw each token as a colored segment
+          c.font = 'bold 28px JetBrains Mono, monospace'
+          let totalW = 0
+          currentTokens.forEach(t => { totalW += c.measureText(t).width + 20 })
+          let x = (w - totalW) / 2
+          const y = h * 0.5
 
-      // Example card
-      const card = document.createElement('div')
-      card.style.cssText = `
-        background: rgba(45,45,45,0.04); border-radius: 16px;
-        padding: 28px 24px; margin-bottom: 24px;
-      `
-      wrapper.appendChild(card)
+          currentTokens.forEach((tok, i) => {
+            const col = tokenColor(i)
+            const tw = c.measureText(tok).width + 20
+            c.fillStyle = col.bg
+            c.fillRect(x, y - 24, tw, 48)
+            c.strokeStyle = col.border
+            c.lineWidth = 2
+            c.strokeRect(x, y - 24, tw, 48)
+            c.fillStyle = '#2D2D2D'
+            c.textAlign = 'center'
+            c.fillText(tok, x + tw / 2, y + 8)
+            c.textAlign = 'left'
+            x += tw + 4
+          })
+        } else {
+          // Empty state — question mark placeholder
+          c.font = 'bold 72px sans-serif'
+          c.fillStyle = 'rgba(74,144,217,0.15)'
+          c.textAlign = 'center'
+          c.textBaseline = 'middle'
+          c.fillText('?', w / 2, h / 2)
+          c.textBaseline = 'alphabetic'
+        }
 
-      // Navigation button
-      const navBtn = document.createElement('button')
-      navBtn.className = 'narrator-btn'
-      wrapper.appendChild(navBtn)
-
-      function renderExample() {
-        card.innerHTML = ''
-        const ex = surprisingExamples[exampleIndex]
-
-        // Word label
-        const wordLabel = document.createElement('div')
-        wordLabel.textContent = `"${ex.text}"`
-        wordLabel.style.cssText = `
-          font-family: var(--font-mono); font-size: 26px; color: var(--text);
-          margin-bottom: 16px; font-weight: bold;
-        `
-        card.appendChild(wordLabel)
-
-        // Token boxes
-        const tokenRow = document.createElement('div')
-        tokenRow.style.cssText = `display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px;`
-        ex.tokens.forEach((tok, i) => {
-          const col = tokenColor(i)
-          const box = document.createElement('div')
-          box.style.cssText = `
-            background: ${col.bg}; border: 2px solid ${col.border};
-            border-radius: 8px; padding: 8px 14px;
-            font-family: var(--font-mono); font-size: 18px; color: var(--text);
-          `
-          box.textContent = tok
-          tokenRow.appendChild(box)
-        })
-        card.appendChild(tokenRow)
-
-        // Note
-        const note = document.createElement('div')
-        note.textContent = ex.note
-        note.style.cssText = `
-          font-family: var(--font-hand); font-size: 18px; color: var(--accent);
-          line-height: 1.5;
-        `
-        card.appendChild(note)
-
-        // Progress dots
-        const dots = document.createElement('div')
-        dots.style.cssText = `display: flex; gap: 6px; justify-content: center; margin-top: 20px;`
-        surprisingExamples.forEach((_, di) => {
-          const dot = document.createElement('div')
-          dot.style.cssText = `
-            width: 8px; height: 8px; border-radius: 50%;
-            background: ${di === exampleIndex ? 'var(--accent)' : 'rgba(45,45,45,0.2)'};
-          `
-          dots.appendChild(dot)
-        })
-        card.appendChild(dots)
-
-        // Update button label
-        const isLast = exampleIndex === surprisingExamples.length - 1
-        navBtn.textContent = ctx.i18n.t(isLast ? 'ch01.s04_btn_done' : 'ch01.s04_btn_next')
+        c.restore()
+        animFrame = requestAnimationFrame(drawTokenBoundaries)
       }
 
-      navBtn.addEventListener('click', () => {
-        if (exampleIndex < surprisingExamples.length - 1) {
-          exampleIndex++
-          renderExample()
-        } else {
-          ctx.bus.emit('scene:advance')
+      // Build prediction game rounds from surprising examples
+      const rounds = bpeData.surprisingExamples.map(ex => ({
+        prompt: `"${ex.text}" — How many tokens?`,
+        choices: ['1', '2', '3', '4+'],
+        correct: ex.tokens.length >= 4 ? 3 : ex.tokens.length - 1,
+        explanation: ex.note,
+        _word: ex.text,
+        _tokens: ex.tokens
+      }))
+
+      let roundIdx = 0
+
+      // Right panel — title + description above the prediction game
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch01.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch01.s04_text')
+      desc.style.marginBottom = '20px'
+      sv.panel.appendChild(desc)
+
+      const game = createPredictionGame(sv.panel, {
+        rounds,
+        i18n: ctx.i18n,
+        onComplete: (score, total) => {
+          const msg = document.createElement('p')
+          msg.className = 'fade-in'
+          msg.textContent = `${score}/${total} correct!`
+          sv.panel.appendChild(msg)
+
+          const advBtn = document.createElement('button')
+          advBtn.className = 'scene-btn fade-in'
+          advBtn.textContent = ctx.i18n.t('ch01.s04_btn_done')
+          advBtn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+          sv.panel.appendChild(advBtn)
         }
       })
 
-      renderExample()
-      document.getElementById('app').appendChild(wrapper)
-      return { wrapper }
+      // Observe DOM to detect when an answer is revealed, then update the canvas
+      const observer = new MutationObserver(() => {
+        const correctCard = sv.panel.querySelector('.choice-card.correct')
+        if (correctCard) {
+          const roundData = rounds[roundIdx]
+          if (roundData) {
+            currentWord = roundData._word
+            currentTokens = roundData._tokens
+          }
+          // When the next-round button is clicked, clear canvas and advance roundIdx
+          const nextBtns = sv.panel.querySelectorAll('.scene-btn')
+          nextBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+              roundIdx++
+              currentWord = null
+              currentTokens = []
+            }, { once: true })
+          })
+        }
+      })
+      observer.observe(sv.panel, { childList: true, subtree: true, attributes: true })
+
+      drawTokenBoundaries()
+
+      return { sv, game, observer, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.observer?.disconnect()
+      rv?.game?.destroy()
+      rv?.sv?.destroy()
     }
   },
 
-  // ─── Scene 5: Wrap-up ─────────────────────────────────────────────────────
+  // ─── Scene 4: Wrap-up [Narrative] ─────────────────────────────────────────
   {
-    id: 'ch01-s05-wrapup',
+    id: 'ch01-s04-wrapup',
     type: 'narrative',
     async enter(ctx) {
       await ctx.narrator.say('ch01.s05_text')
