@@ -1,297 +1,291 @@
+import { createSplitView } from '../../helpers/split-view.js'
+import { createHeatmap } from '../../helpers/heatmap.js'
 import bigramData from './data/bigram-data.json'
 
-// Module-level score storage so Scene 3 can read Scene 2's results
-let _ch02Score = { player: 0, bigram: 0 }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 export default [
-  // Scene 1: Narrative hook — introduce bigram model
+  // Scene 1: The Race [Split-View + Prediction Game]
   {
-    id: 'ch02-s01-hook',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch02.s01_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch02.s01_text2')
-      await ctx.narrator.ask('ch02.s01_text2', [
-        { key: 'ch02.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 2: Interactive — the guessing game
-  {
-    id: 'ch02-s02-game',
+    id: 'ch02-s01-race',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n } = ctx
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+
       const rounds = bigramData.rounds
-      let currentRound = 0
+      let roundIdx = 0
       let playerScore = 0
       let bigramScore = 0
+      let showingResult = false
 
-      // Reset module-level score
-      _ch02Score = { player: 0, bigram: 0 }
+      // Canvas: scoreboard + context display
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch02-game-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; text-align: center; width: 92%; max-width: 640px;
-      `
+        // Title
+        c.font = 'bold 20px Caveat, cursive'
+        c.fillStyle = '#2D2D2D'
+        c.textAlign = 'center'
+        c.fillText('Score Race', w / 2, 40)
 
-      // Score bar
-      const scoreBar = document.createElement('div')
-      scoreBar.style.cssText = `
-        display: flex; justify-content: center; gap: 48px;
-        margin-bottom: 28px; font-family: var(--font-hand); font-size: 22px;
-        color: var(--text);
-      `
-      const youScore = document.createElement('span')
-      const bigramScoreEl = document.createElement('span')
-      scoreBar.appendChild(youScore)
-      scoreBar.appendChild(bigramScoreEl)
-      wrapper.appendChild(scoreBar)
+        // Score bars
+        const barX = 60
+        const barW = w - 120
+        const barH = 30
 
-      // Round label
+        // Player bar
+        c.font = '16px Caveat, cursive'
+        c.textAlign = 'right'
+        c.fillStyle = '#4A90D9'
+        c.fillText(ctx.i18n.t('ch02.s02_you'), barX - 8, 90)
+        c.fillStyle = 'rgba(74, 144, 217, 0.15)'
+        c.fillRect(barX, 75, barW, barH)
+        c.fillStyle = '#4A90D9'
+        c.fillRect(barX, 75, (playerScore / 5) * barW, barH)
+        c.fillStyle = '#fff'
+        c.textAlign = 'center'
+        if (playerScore > 0) c.fillText(playerScore + '', barX + (playerScore / 5) * barW / 2, 95)
+
+        // Bigram bar
+        c.textAlign = 'right'
+        c.fillStyle = '#E8913A'
+        c.fillText(ctx.i18n.t('ch02.s02_bigram'), barX - 8, 140)
+        c.fillStyle = 'rgba(232, 145, 58, 0.15)'
+        c.fillRect(barX, 125, barW, barH)
+        c.fillStyle = '#E8913A'
+        c.fillRect(barX, 125, (bigramScore / 5) * barW, barH)
+        c.fillStyle = '#fff'
+        c.textAlign = 'center'
+        if (bigramScore > 0) c.fillText(bigramScore + '', barX + (bigramScore / 5) * barW / 2, 145)
+
+        // Context sentence display
+        if (roundIdx < rounds.length) {
+          const round = rounds[roundIdx]
+          c.font = '22px JetBrains Mono, monospace'
+          c.fillStyle = '#2D2D2D'
+          c.textAlign = 'center'
+
+          // Word-wrap the context
+          const contextWords = round.context.split(' ')
+          let line = ''
+          let lineY = h * 0.55
+          contextWords.forEach(word => {
+            const test = line + word + ' '
+            if (c.measureText(test).width > w - 60) {
+              c.fillText(line.trim(), w / 2, lineY)
+              line = word + ' '
+              lineY += 32
+            } else {
+              line = test
+            }
+          })
+          c.fillText(line.trim(), w / 2, lineY)
+
+          // Blank
+          c.fillStyle = '#4A90D9'
+          c.fillText('____', w / 2, lineY + 40)
+        }
+
+        // Bigram probability bars (when showing result)
+        if (showingResult && roundIdx < rounds.length) {
+          const round = rounds[roundIdx]
+          const by = h * 0.78
+          c.font = '12px JetBrains Mono, monospace'
+          c.fillStyle = '#888'
+          c.textAlign = 'left'
+          c.fillText(`Bigram sees: "${round.bigramPrev}" \u2192`, 20, by)
+
+          round.options.forEach((opt, i) => {
+            const oy = by + 18 + i * 22
+            const prob = opt === round.bigramChoice ? round.bigramProb : Math.random() * 0.1
+            c.fillStyle = opt === round.bigramChoice ? '#E8913A' : 'rgba(232,145,58,0.2)'
+            c.fillRect(120, oy, prob * (w - 200), 16)
+            c.fillStyle = '#666'
+            c.textAlign = 'left'
+            c.fillText(opt, 20, oy + 12)
+            c.textAlign = 'right'
+            c.fillText((prob * 100).toFixed(0) + '%', w - 20, oy + 12)
+          })
+        }
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // Panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch02.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch02.s01_text')
+      sv.panel.appendChild(desc)
+
       const roundLabel = document.createElement('div')
-      roundLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--text);
-        opacity: 0.65; margin-bottom: 16px;
-      `
-      wrapper.appendChild(roundLabel)
+      roundLabel.className = 'score-badge'
+      sv.panel.appendChild(roundLabel)
 
-      // Context display
-      const contextEl = document.createElement('div')
-      contextEl.style.cssText = `
-        font-family: var(--font-hand); font-size: 28px; line-height: 1.5;
-        color: var(--text); margin-bottom: 8px;
-        min-height: 80px;
-      `
-      wrapper.appendChild(contextEl)
+      const prompt = document.createElement('p')
+      prompt.style.cssText = 'font-size: 18px; margin: 12px 0; font-weight: bold;'
+      sv.panel.appendChild(prompt)
 
-      // Pick prompt
-      const pickPrompt = document.createElement('div')
-      pickPrompt.style.cssText = `
-        font-family: var(--font-hand); font-size: 20px; color: var(--text);
-        opacity: 0.75; margin-bottom: 20px;
-      `
-      pickPrompt.textContent = i18n.t('ch02.s02_pick')
-      wrapper.appendChild(pickPrompt)
+      const choicesDiv = document.createElement('div')
+      choicesDiv.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;'
+      sv.panel.appendChild(choicesDiv)
 
-      // Options grid
-      const optionsGrid = document.createElement('div')
-      optionsGrid.style.cssText = `
-        display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-        margin-bottom: 20px;
-      `
-      wrapper.appendChild(optionsGrid)
+      const feedbackEl = document.createElement('p')
+      feedbackEl.style.cssText = 'font-size: 16px; min-height: 40px; color: var(--text-muted);'
+      sv.panel.appendChild(feedbackEl)
 
-      // Result area
-      const resultArea = document.createElement('div')
-      resultArea.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; line-height: 1.6;
-        color: var(--text); min-height: 72px; margin-bottom: 16px;
-        padding: 12px 16px; border-radius: 12px;
-        background: rgba(128,128,128,0.07);
-        display: none;
-      `
-      wrapper.appendChild(resultArea)
-
-      // Next button
-      const nextBtn = document.createElement('button')
-      nextBtn.className = 'narrator-btn'
-      nextBtn.style.display = 'none'
-      wrapper.appendChild(nextBtn)
-
-      document.getElementById('app').appendChild(wrapper)
-
-      const updateScoreBar = () => {
-        youScore.textContent = `${i18n.t('ch02.s02_you')} 🧠 ${playerScore}`
-        bigramScoreEl.textContent = `${i18n.t('ch02.s02_bigram')} 🤖 ${bigramScore}`
-      }
-
-      const renderRound = (roundIdx) => {
+      function renderRound() {
+        showingResult = false
         const round = rounds[roundIdx]
-        resultArea.style.display = 'none'
-        nextBtn.style.display = 'none'
-        pickPrompt.style.display = 'block'
+        roundLabel.textContent = ctx.i18n.t('ch02.s02_round', { current: roundIdx + 1, total: rounds.length })
+        prompt.textContent = ctx.i18n.t('ch02.s02_pick')
+        feedbackEl.textContent = ''
+        choicesDiv.innerHTML = ''
 
-        roundLabel.textContent = i18n.t('ch02.s02_round', {
-          current: roundIdx + 1,
-          total: rounds.length
-        })
+        // Remove any previous next button
+        const oldNext = sv.panel.querySelector('.scene-btn')
+        if (oldNext) oldNext.remove()
 
-        // Build context with last word highlighted
-        const words = round.context.split(' ')
-        const lastWord = words[words.length - 1]
-        const restOfContext = words.slice(0, -1).join(' ')
-        contextEl.innerHTML = `${restOfContext} <span style="color: var(--accent); font-weight: 700;">${lastWord}</span>`
-
-        // Build option buttons
-        optionsGrid.innerHTML = ''
-        round.options.forEach(option => {
+        round.options.forEach(opt => {
           const btn = document.createElement('button')
-          btn.textContent = option
-          btn.style.cssText = `
-            font-family: var(--font-mono); font-size: 20px; padding: 16px 24px;
-            background: var(--bg); border: 2.5px solid var(--text);
-            border-radius: 12px; cursor: pointer; color: var(--text);
-            transition: background 0.15s, border-color 0.15s;
-          `
-          btn.addEventListener('mouseenter', () => {
-            btn.style.background = 'var(--accent-light)'
-          })
-          btn.addEventListener('mouseleave', () => {
-            if (!btn.dataset.resolved) btn.style.background = 'var(--bg)'
-          })
-          btn.addEventListener('click', () => handlePick(option, round))
-          optionsGrid.appendChild(btn)
+          btn.className = 'choice-card'
+          btn.textContent = opt
+          btn.addEventListener('click', () => handlePick(opt))
+          choicesDiv.appendChild(btn)
         })
-
-        updateScoreBar()
       }
 
-      const handlePick = (playerPick, round) => {
+      function handlePick(picked) {
+        const round = rounds[roundIdx]
+        showingResult = true
+
         // Disable all buttons
-        const btns = Array.from(optionsGrid.querySelectorAll('button'))
-        btns.forEach(btn => {
-          btn.disabled = true
-          btn.dataset.resolved = 'true'
-          btn.style.cursor = 'default'
-          btn.onmouseenter = null
-          btn.onmouseleave = null
-          btn.style.background = 'var(--bg)'
+        choicesDiv.querySelectorAll('.choice-card').forEach(b => {
+          b.style.pointerEvents = 'none'
+          if (b.textContent === round.correct) b.classList.add('correct')
+          else if (b.textContent === picked && picked !== round.correct) b.classList.add('wrong')
         })
 
-        const playerCorrect = playerPick === round.correct
-        const bigramCorrect = round.bigramChoice === round.correct
+        // Score
+        if (picked === round.correct) playerScore++
+        if (round.bigramChoice === round.correct) bigramScore++
 
-        if (playerCorrect) playerScore++
-        if (bigramCorrect) bigramScore++
+        feedbackEl.textContent = round.explanation
 
-        // Color player's pick
-        const playerBtn = btns.find(b => b.textContent === playerPick)
-        if (playerBtn) {
-          if (playerCorrect) {
-            playerBtn.style.borderColor = '#5ba55b'
-            playerBtn.style.background = 'rgba(91,165,91,0.15)'
-          } else {
-            playerBtn.style.borderColor = '#c83c3c'
-            playerBtn.style.background = 'rgba(200,60,60,0.1)'
-          }
-        }
+        // Next button
+        const nextBtn = document.createElement('button')
+        nextBtn.className = 'scene-btn fade-in'
+        nextBtn.style.marginTop = '8px'
 
-        // Highlight correct answer if player was wrong
-        if (!playerCorrect) {
-          const correctBtn = btns.find(b => b.textContent === round.correct)
-          if (correctBtn) {
-            correctBtn.style.borderColor = '#5ba55b'
-            correctBtn.style.background = 'rgba(91,165,91,0.15)'
-          }
-        }
-
-        // Show bigram pick label
-        const bigramBtn = btns.find(b => b.textContent === round.bigramChoice)
-        if (bigramBtn) {
-          const bigramLabel = document.createElement('span')
-          bigramLabel.textContent = ' 🤖'
-          bigramLabel.style.fontSize = '14px'
-          bigramBtn.appendChild(bigramLabel)
-          if (bigramCorrect && round.bigramChoice !== playerPick) {
-            bigramBtn.style.borderColor = '#5ba55b'
-            bigramBtn.style.background = 'rgba(91,165,91,0.15)'
-          } else if (!bigramCorrect && round.bigramChoice !== playerPick && round.bigramChoice !== round.correct) {
-            bigramBtn.style.borderColor = '#c83c3c'
-            bigramBtn.style.background = 'rgba(200,60,60,0.1)'
-          }
-        }
-
-        // Show result and explanation
-        const verdict = playerCorrect ? i18n.t('ch02.s02_correct') : i18n.t('ch02.s02_wrong')
-        resultArea.innerHTML = `<strong>${verdict}</strong><br><span style="opacity:0.8;font-size:16px;">${round.explanation}</span>`
-        resultArea.style.display = 'block'
-        pickPrompt.style.display = 'none'
-
-        updateScoreBar()
-
-        // Advance to next round or finish
-        const isLast = currentRound === rounds.length - 1
-        if (isLast) {
-          nextBtn.style.display = 'none'
-          // Store final scores
-          _ch02Score = { player: playerScore, bigram: bigramScore }
-          setTimeout(() => bus.emit('scene:advance'), 2200)
+        if (roundIdx < rounds.length - 1) {
+          nextBtn.textContent = ctx.i18n.t('ch02.s02_next')
+          nextBtn.addEventListener('click', () => {
+            roundIdx++
+            nextBtn.remove()
+            renderRound()
+          })
         } else {
-          nextBtn.textContent = i18n.t('ch02.s02_next')
-          nextBtn.style.display = 'inline-block'
-          nextBtn.onclick = () => {
-            currentRound++
-            renderRound(currentRound)
-          }
+          nextBtn.textContent = '\u2192'
+          nextBtn.addEventListener('click', () => {
+            feedbackEl.textContent = ctx.i18n.t('ch02.s03_text', { playerScore, bigramScore })
+            nextBtn.textContent = ctx.i18n.t('ch02.s03_btn')
+            nextBtn.onclick = () => ctx.bus.emit('scene:advance')
+          })
         }
+        sv.panel.appendChild(nextBtn)
       }
 
-      renderRound(0)
-      updateScoreBar()
+      renderRound()
+      draw()
 
-      return { wrapper }
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 3: Reveal scores and contrast context vs. no context
+  // Scene 2: Bigram Matrix [Split-View + Interactive Heatmap]
   {
-    id: 'ch02-s03-scores',
-    type: 'narrative',
+    id: 'ch02-s02-matrix',
+    type: 'interactive',
     async enter(ctx) {
-      const { player, bigram } = _ch02Score
-      // narrator.say supports simple key interpolation via i18n
-      // We build the string directly since scores are dynamic
-      const text1 = ctx.i18n.t('ch02.s03_text', { playerScore: player, bigramScore: bigram })
-      const text2 = ctx.i18n.t('ch02.s03_text2')
-      const btnKey = 'ch02.s03_btn'
+      const sv = createSplitView(document.getElementById('app'))
 
-      await ctx.narrator.say(text1)
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say(text2)
-      await ctx.narrator.ask(text2, [
-        { key: btnKey, action: () => ctx.bus.emit('scene:advance') }
-      ])
+      // Small bigram matrix from common words
+      const words = ['the', 'cat', 'sat', 'on', 'mat', 'a']
+      const matrix = [
+        { label: 'the', values: [0.05, 0.35, 0.05, 0.10, 0.25, 0.15] },
+        { label: 'cat', values: [0.15, 0.02, 0.55, 0.10, 0.05, 0.08] },
+        { label: 'sat', values: [0.10, 0.05, 0.02, 0.60, 0.08, 0.10] },
+        { label: 'on',  values: [0.45, 0.05, 0.02, 0.05, 0.20, 0.18] },
+        { label: 'mat', values: [0.30, 0.05, 0.05, 0.10, 0.02, 0.10] },
+        { label: 'a',   values: [0.10, 0.30, 0.05, 0.05, 0.15, 0.05] },
+      ]
+
+      const hoveredInfo = document.createElement('p')
+      hoveredInfo.style.cssText = 'font-size: 16px; color: var(--accent); min-height: 30px; font-family: var(--font-mono);'
+
+      const heatmap = createHeatmap(sv.canvas, sv.ctx, {
+        rows: matrix,
+        colLabels: words,
+        onCellHover: (row, col, value) => {
+          hoveredInfo.textContent = `P("${words[col]}" | "${words[row]}") = ${(value * 100).toFixed(0)}%`
+        }
+      })
+
+      // Panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch02.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch02.s04_text')
+      sv.panel.appendChild(desc)
+
+      const desc2 = document.createElement('p')
+      desc2.textContent = ctx.i18n.t('ch02.s04_text2')
+      sv.panel.appendChild(desc2)
+
+      sv.panel.appendChild(hoveredInfo)
+
+      const btn = document.createElement('button')
+      btn.className = 'scene-btn'
+      btn.textContent = ctx.i18n.t('ch02.s04_btn')
+      btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+      sv.panel.appendChild(btn)
+
+      // Redraw heatmap on resize
+      const resizeHandler = () => { sv.resize(); heatmap.redraw() }
+      window.addEventListener('resize', resizeHandler)
+
+      return { sv, heatmap, resizeHandler }
     },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
+    exit(rv) {
+      if (rv?.resizeHandler) window.removeEventListener('resize', rv.resizeHandler)
+      rv?.heatmap?.destroy()
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 4: The BUT — pivot toward attention
+  // Scene 3: Wrap-up [Narrative]
   {
-    id: 'ch02-s04-but',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch02.s04_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch02.s04_text2')
-      await ctx.narrator.ask('ch02.s04_text2', [
-        { key: 'ch02.s04_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 5: Transition — introduce "attention"
-  {
-    id: 'ch02-s05-attention',
+    id: 'ch02-s03-wrapup',
     type: 'narrative',
     async enter(ctx) {
       await ctx.narrator.say('ch02.s05_text')
-      await new Promise(r => setTimeout(r, 800))
+      await sleep(800)
       await ctx.narrator.say('ch02.s05_text2')
       await ctx.narrator.ask('ch02.s05_text2', [
         { key: 'ch02.s05_btn', action: () => ctx.bus.emit('chapter:complete', 'ch02-guessing-game') }
