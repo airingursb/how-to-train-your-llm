@@ -52,6 +52,10 @@ export default [
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
 
+        // Small top padding so content is centered rather than top-hugged
+        const yOff = Math.max(0, h * 0.04)
+        c.translate(0, yOff)
+
         // Title
         c.font = 'bold 16px LXGW WenKai'
         c.fillStyle = '#888'

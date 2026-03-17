@@ -25,6 +25,11 @@ export default [
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
 
+        // Center content: ticket (16+52=68px) + 3 slots (3*72=216px) = ~284px total
+        const contentH = 284
+        const yOff = Math.max(0, (h - contentH) / 2)
+        c.translate(0, yOff)
+
         const task = tasks[taskIdx]
 
         // Instruction ticket
@@ -255,6 +260,10 @@ export default [
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
         t++
+
+        // Small top padding so question text isn't clipped at edge
+        const yOff = Math.max(0, h * 0.04)
+        c.translate(0, yOff)
 
         // Question at top
         c.font = 'bold 13px JetBrains Mono, monospace'

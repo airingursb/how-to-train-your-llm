@@ -160,6 +160,13 @@ export default [
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
 
+        // Estimate content height and center vertically
+        const tokenRowH = done ? 40 : 38
+        const tokenRowsCount = Math.ceil(tokens.length / Math.max(1, Math.floor((w - 40) / 30)))
+        const contentH = done ? (70 + tokenRowsCount * tokenRowH) : (48 + tokenRowsCount * tokenRowH)
+        const yOff = Math.max(0, (h - contentH) / 2)
+        c.translate(0, yOff)
+
         if (done) {
           // Show final tokens in a flow layout
           c.font = 'bold 16px JetBrains Mono, monospace'

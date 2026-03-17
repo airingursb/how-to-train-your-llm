@@ -99,8 +99,10 @@ export default [
         const blockH = 40
         const blockW = w * 0.5
         const startX = (w - blockW) / 2
-        const startY = 30
         const gap = 12
+        // Center pipeline blocks vertically
+        const contentH = steps.length * (blockH + gap)
+        const startY = Math.max(20, (h - contentH) / 2)
 
         // Draw pipeline blocks
         steps.forEach((step, i) => {

@@ -27,13 +27,16 @@ export default [
         // Triangle vertices
         const cx = w / 2
         const triH = Math.min(h * 0.6, w * 0.5)
-        const triTop   = { x: cx,                  y: 40 }
-        const triLeft  = { x: cx - triH * 0.9,     y: 40 + triH }
-        const triRight = { x: cx + triH * 0.9,     y: 40 + triH }
+        // Center triangle vertically: total content height ≈ triH + 60 (top label + bottom labels)
+        const contentH = triH + 60
+        const triTopY = Math.max(30, (h - contentH) / 2 + 20)
+        const triTop   = { x: cx,                  y: triTopY }
+        const triLeft  = { x: cx - triH * 0.9,     y: triTopY + triH }
+        const triRight = { x: cx + triH * 0.9,     y: triTopY + triH }
 
         // Gradient fill — green center, red at edges
         const gradCx = cx
-        const gradCy = 40 + triH * 0.6
+        const gradCy = triTopY + triH * 0.6
         const gradient = c.createRadialGradient(gradCx, gradCy, 0, gradCx, gradCy, triH * 0.8)
         gradient.addColorStop(0, 'rgba(91, 165, 91, 0.2)')
         gradient.addColorStop(1, 'rgba(217, 83, 79, 0.15)')
@@ -221,8 +224,10 @@ export default [
         const blockH = 40
         const blockW = w * 0.55
         const startX = (w - blockW) / 2
-        const startY = 20
         const gap = 10
+        // Center pipeline blocks vertically
+        const contentH = pipelineStages.length * (blockH + gap)
+        const startY = Math.max(20, (h - contentH) / 2)
 
         pipelineStages.forEach((stage, i) => {
           const y = startY + i * (blockH + gap)

@@ -30,6 +30,10 @@ export default [
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
 
+        // Shift content down to avoid top-left hugging
+        const yOff = Math.max(0, h * 0.05)
+        c.translate(0, yOff)
+
         // ── Scoreboard (compact, top) ──
         const scoreY = 30
         c.font = 'bold 16px LXGW WenKai, cursive'

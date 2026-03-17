@@ -223,7 +223,9 @@ export default [
 
         const tokenW = 80
         const startX = (w - tokenW * tokens.length) / 2
-        const baseY = h * 0.2
+        // Center content (token row + ~280px of steps below) vertically
+        const contentH = 310
+        const baseY = Math.max(20, (h - contentH) / 2)
 
         // Draw tokens
         c.font = '16px JetBrains Mono, monospace'
@@ -381,6 +383,11 @@ export default [
         c.save()
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
+
+        // Center: label (30px) + arc space above tokens + token row at h*0.5
+        // Content fits well with a small top offset
+        const yOff = Math.max(0, h * 0.05)
+        c.translate(0, yOff)
 
         const tokenW = Math.min(65, (w - 40) / sentence.length)
         const startX = (w - tokenW * sentence.length) / 2

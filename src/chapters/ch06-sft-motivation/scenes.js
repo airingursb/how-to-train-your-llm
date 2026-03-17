@@ -148,6 +148,10 @@ export default [
         c.clearRect(0, 0, w, h)
         t++
 
+        // Content fills canvas with labels/particles; add small top padding
+        const yOff = Math.max(0, h * 0.04)
+        c.translate(0, yOff)
+
         const halfW = w / 2
 
         // Labels
