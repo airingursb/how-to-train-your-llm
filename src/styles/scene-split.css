@@ -12,9 +12,19 @@
   flex: 3;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
 }
 
 .scene-canvas canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100% !important;
   height: 100% !important;
 }
