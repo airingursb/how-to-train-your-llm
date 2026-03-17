@@ -295,3 +295,40 @@
 .glow-pulse {
   animation: glow-pulse 1.5s ease infinite;
 }
+
+/* === Scene transitions === */
+.scene-panel {
+  animation: fade-in 0.4s ease forwards;
+}
+
+/* === Drag item improvements === */
+.drag-item.dragging {
+  transform: scale(1.05) rotate(2deg);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 10;
+}
+
+/* === Button press effect === */
+.scene-btn:active {
+  transform: scale(0.96);
+}
+
+/* === Smooth step transitions === */
+.step-dot {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-line {
+  transition: background 0.3s ease;
+}
+
+/* === Card selection glow === */
+.choice-card.selected {
+  box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+}
+
+/* === Compare card reveal === */
+.compare-card.picked-correct,
+.compare-card.picked-wrong {
+  animation: fade-in 0.3s ease;
+}

@@ -93,6 +93,7 @@ async function boot() {
   })
 
   bus.on('scene:advance', () => {
+    audio.synth('whoosh')
     sceneManager.advance()
   })
 
