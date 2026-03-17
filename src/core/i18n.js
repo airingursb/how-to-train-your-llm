@@ -9,7 +9,8 @@ export class I18n {
 
   async load(locale) {
     this._locale = locale
-    const resp = await fetch(`/src/locales/${locale}.json`)
+    const base = import.meta.env.BASE_URL || '/'
+    const resp = await fetch(`${base}locales/${locale}.json`)
     this._strings = await resp.json()
   }
 
