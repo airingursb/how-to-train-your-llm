@@ -43,7 +43,8 @@ async function boot() {
   // 4. Narrator
   const narrator = new Narrator(
     document.getElementById('narrator-container'),
-    i18n
+    i18n,
+    audio
   )
 
   // 5. Scene manager
@@ -67,17 +68,20 @@ async function boot() {
   // 8. Wire events
   bus.on('game:start', async () => {
     landing.hide()
+    audio.startBGM()
     await startChapter(0, ctx)
   })
 
   bus.on('game:continue', async () => {
     landing.hide()
+    audio.startBGM()
     const startIndex = state.getSetting('lastChapter') || 0
     await startChapter(startIndex, ctx)
   })
 
   bus.on('game:restart', async () => {
     landing.hide()
+    audio.startBGM()
     state.reset()
     await startChapter(0, ctx)
   })
@@ -145,7 +149,14 @@ async function boot() {
   // Set initial state from saved preference
   setLangUI(i18n.locale)
 
-  // 11. Visibility
+  // 11. Global button click sound
+  document.addEventListener('click', (e) => {
+    if (e.target.matches('.scene-btn, .narrator-btn, .choice-card, .compare-card, .lang-opt')) {
+      audio.synth('click')
+    }
+  })
+
+  // 12. Visibility
   document.addEventListener('visibilitychange', () => {
     document.hidden ? engine.pause() : engine.resume()
   })

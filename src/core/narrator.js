@@ -1,8 +1,9 @@
 // src/core/narrator.js
 export class Narrator {
-  constructor(container, i18n) {
+  constructor(container, i18n, audio) {
     this._container = container
     this._i18n = i18n
+    this._audio = audio || null
     this._textEl = null
     this._sizerEl = null
     this._visibleEl = null
@@ -64,6 +65,7 @@ export class Narrator {
     this._visibleEl.innerHTML = ''
     this._gen = (this._gen || 0) + 1
     const gen = this._gen
+    let tickCounter = 0
 
     await new Promise((resolve) => {
       this._skipResolve = () => {
@@ -80,6 +82,11 @@ export class Narrator {
         if (!this._typing) return
         if (i < chars.length) {
           this._visibleEl.innerHTML += chars[i]
+          // Play tick on every 2nd visible character (skip spaces/punctuation)
+          if (this._audio && /\S/.test(chars[i])) {
+            tickCounter++
+            if (tickCounter % 2 === 0) this._audio.synth('tick')
+          }
           i++
           setTimeout(type, 50)
         } else {
@@ -102,6 +109,7 @@ export class Narrator {
         btn.classList.add('narrator-btn')
         btn.textContent = this._i18n.t(choice.key)
         btn.addEventListener('click', () => {
+          if (this._audio) this._audio.synth('click')
           this._choicesEl.innerHTML = ''
           if (choice.action) choice.action()
           resolve(choice.key)
