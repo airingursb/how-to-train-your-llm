@@ -84,7 +84,38 @@ async function boot() {
     }
   })
 
-  // 10. Visibility
+  // 10. Language toggle
+  const langEn = document.getElementById('lang-en')
+  const langZh = document.getElementById('lang-zh')
+
+  const setLangUI = (locale) => {
+    langEn.classList.toggle('active', locale === 'en')
+    langZh.classList.toggle('active', locale === 'zh')
+  }
+
+  langEn.addEventListener('click', async () => {
+    await i18n.switchLocale('en')
+    state.setSetting('locale', 'en')
+    setLangUI('en')
+    bus.emit('locale:change', 'en')
+  })
+
+  langZh.addEventListener('click', async () => {
+    await i18n.switchLocale('zh')
+    state.setSetting('locale', 'zh')
+    setLangUI('zh')
+    bus.emit('locale:change', 'zh')
+  })
+
+  // Update static UI on locale change
+  i18n.onChange((locale) => {
+    soundLabel.textContent = audio.muted ? i18n.t('ui.sound_off') : i18n.t('ui.sound_on')
+  })
+
+  // Set initial state from saved preference
+  setLangUI(i18n.locale)
+
+  // 11. Visibility
   document.addEventListener('visibilitychange', () => {
     document.hidden ? engine.pause() : engine.resume()
   })

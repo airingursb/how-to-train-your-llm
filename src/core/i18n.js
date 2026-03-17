@@ -2,6 +2,7 @@ export class I18n {
   constructor() {
     this._strings = {}
     this._locale = 'en'
+    this._callbacks = []
   }
 
   get locale() { return this._locale }
@@ -10,6 +11,19 @@ export class I18n {
     this._locale = locale
     const resp = await fetch(`/src/locales/${locale}.json`)
     this._strings = await resp.json()
+  }
+
+  async switchLocale(locale) {
+    if (locale === this._locale) return
+    await this.load(locale)
+    this._callbacks.forEach(cb => cb(locale))
+  }
+
+  onChange(callback) {
+    this._callbacks.push(callback)
+    return () => {
+      this._callbacks = this._callbacks.filter(cb => cb !== callback)
+    }
   }
 
   t(key, params = {}) {
