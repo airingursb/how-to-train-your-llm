@@ -1,404 +1,399 @@
+import { createSplitView } from '../../helpers/split-view.js'
 import prefData from './data/preference-data.json'
 
-export default [
-  // Scene 1: Narrative — intro to human preferences
-  {
-    id: 'ch08-s01-intro',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch08.s01_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch08.s01_text2')
-      await ctx.narrator.ask('ch08.s01_text2', [
-        { key: 'ch08.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
-  // Scene 2: Interactive — preference ranking
+export default [
+  // Scene 1: Preference Collection [Split-View + Interactive]
   {
-    id: 'ch08-s02-rank',
+    id: 'ch08-s01-preferences',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n } = ctx
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+
       const rounds = prefData.rounds
-      let currentIndex = 0
-      let agreementCount = 0
-      let prefCount = 0
+      let roundIdx = 0
+      let collected = 0
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch08-rank-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 780px;
-        display: flex; flex-direction: column; align-items: center; gap: 18px;
-      `
+      // Neural network nodes for reward model visualization
+      const layers = [4, 6, 4, 1]
+      const nodes = []
+      const connections = []
 
-      // Round counter
-      const roundLabel = document.createElement('div')
-      roundLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--accent);
-        letter-spacing: 0.05em; align-self: flex-start;
-      `
+      // Build network structure
+      layers.forEach((count, li) => {
+        for (let ni = 0; ni < count; ni++) {
+          nodes.push({ layer: li, index: ni, activation: 0.3 })
+        }
+      })
 
-      // Preference counter
-      const prefCounter = document.createElement('div')
-      prefCounter.style.cssText = `
-        font-family: var(--font-hand); font-size: 14px; color: var(--text);
-        opacity: 0.7; align-self: flex-end;
-      `
-
-      const topRow = document.createElement('div')
-      topRow.style.cssText = `
-        display: flex; justify-content: space-between; align-items: center; width: 100%;
-      `
-      topRow.appendChild(roundLabel)
-      topRow.appendChild(prefCounter)
-
-      // "Which is better?" label
-      const whichLabel = document.createElement('div')
-      whichLabel.textContent = i18n.t('ch08.s02_which_better')
-      whichLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--text);
-        text-align: center;
-      `
-
-      // Prompt box
-      const promptBox = document.createElement('div')
-      promptBox.style.cssText = `
-        width: 100%; padding: 14px 20px; border-radius: 10px;
-        background: rgba(var(--accent-rgb, 255,140,0), 0.12);
-        border: 2px solid var(--accent);
-        display: flex; flex-direction: column; gap: 6px; box-sizing: border-box;
-      `
-      const promptLabel = document.createElement('div')
-      promptLabel.textContent = i18n.t('ch08.s02_prompt_label')
-      promptLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 13px; color: var(--accent);
-        font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
-      `
-      const promptText = document.createElement('div')
-      promptText.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--text); line-height: 1.5;
-      `
-      promptBox.appendChild(promptLabel)
-      promptBox.appendChild(promptText)
-
-      // Response cards container
-      const cardsRow = document.createElement('div')
-      cardsRow.style.cssText = `
-        display: flex; flex-direction: row; gap: 14px; width: 100%;
-      `
-
-      // Feedback area
-      const feedback = document.createElement('div')
-      feedback.style.cssText = `
-        font-family: var(--font-hand); font-size: 16px; color: var(--text);
-        text-align: center; min-height: 24px; line-height: 1.5; max-width: 640px;
-      `
-
-      // Next button
-      const nextBtn = document.createElement('button')
-      nextBtn.className = 'narrator-btn'
-      nextBtn.style.display = 'none'
-
-      wrapper.appendChild(topRow)
-      wrapper.appendChild(whichLabel)
-      wrapper.appendChild(promptBox)
-      wrapper.appendChild(cardsRow)
-      wrapper.appendChild(feedback)
-      wrapper.appendChild(nextBtn)
-      document.getElementById('app').appendChild(wrapper)
-
-      const renderRound = () => {
-        const round = rounds[currentIndex]
-        let chose = null
-
-        roundLabel.textContent = i18n.t('ch08.s02_round', {
-          current: currentIndex + 1,
-          total: rounds.length,
-        })
-        prefCounter.textContent = i18n.t('ch08.s02_preferences_collected', { count: prefCount })
-        promptText.textContent = round.prompt
-        feedback.textContent = ''
-        nextBtn.style.display = 'none'
-        cardsRow.innerHTML = ''
-
-        const makeCard = (label, text, value) => {
-          const card = document.createElement('div')
-          card.style.cssText = `
-            flex: 1; padding: 16px 18px; border-radius: 10px;
-            border: 2.5px solid var(--text); cursor: pointer;
-            background: var(--bg); box-sizing: border-box;
-            display: flex; flex-direction: column; gap: 8px;
-            transition: border-color 0.15s, box-shadow 0.15s;
-          `
-
-          const cardLabel = document.createElement('div')
-          cardLabel.textContent = label
-          cardLabel.style.cssText = `
-            font-family: var(--font-hand); font-size: 13px; color: var(--accent);
-            font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
-          `
-
-          const cardText = document.createElement('div')
-          cardText.style.cssText = `
-            font-family: var(--font-hand); font-size: 15px; line-height: 1.6; color: var(--text);
-          `
-          cardText.textContent = text
-
-          card.appendChild(cardLabel)
-          card.appendChild(cardText)
-
-          card.addEventListener('mouseenter', () => {
-            if (!chose) card.style.borderColor = 'var(--accent)'
-          })
-          card.addEventListener('mouseleave', () => {
-            if (!chose) card.style.borderColor = 'var(--text)'
-          })
-
-          card.addEventListener('click', () => {
-            if (chose) return
-            chose = value
-            prefCount++
-
-            const isCorrect = value === round.better
-            const agreedText = isCorrect
-              ? i18n.t('ch08.s02_correct')
-              : i18n.t('ch08.s02_different')
-
-            if (isCorrect) agreementCount++
-
-            // Highlight chosen and correct
-            allCards.forEach(([c, v]) => {
-              if (v === round.better) {
-                c.style.borderColor = '#22c55e'
-                c.style.boxShadow = '0 0 0 3px rgba(34,197,94,0.25)'
-              } else if (v === value && !isCorrect) {
-                c.style.borderColor = '#ef4444'
-              } else {
-                c.style.borderColor = 'rgba(128,128,128,0.3)'
-                c.style.cursor = 'default'
-              }
+      // Build connections with random initial weights
+      for (let li = 0; li < layers.length - 1; li++) {
+        for (let fi = 0; fi < layers[li]; fi++) {
+          for (let ti = 0; ti < layers[li + 1]; ti++) {
+            connections.push({
+              fromLayer: li,
+              fromNode: fi,
+              toLayer: li + 1,
+              toNode: ti,
+              weight: 0.1 + Math.random() * 0.2
             })
+          }
+        }
+      }
 
-            const reasonDiv = document.createElement('div')
-            reasonDiv.style.cssText = `
-              margin-top: 6px; padding-top: 8px;
-              border-top: 1px dashed rgba(128,128,128,0.3);
-              font-family: var(--font-hand); font-size: 13px;
-              color: #22c55e; line-height: 1.5;
-            `
-            reasonDiv.textContent = round.reason
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-            const correctCard = allCards.find(([, v]) => v === round.better)?.[0]
-            if (correctCard) correctCard.appendChild(reasonDiv)
+        // Title
+        c.font = 'bold 16px Caveat'
+        c.fillStyle = '#888'
+        c.textAlign = 'center'
+        c.fillText('Reward Model', w / 2, 25)
 
-            feedback.textContent = agreedText
-            feedback.style.color = isCorrect ? '#22c55e' : 'var(--accent)'
+        // Draw neural network
+        const netH = h * 0.55
+        const netY = 40
 
-            prefCounter.textContent = i18n.t('ch08.s02_preferences_collected', { count: prefCount })
+        function nodePos(layer, index) {
+          const layerX = 40 + (layer / (layers.length - 1)) * (w - 80)
+          const count = layers[layer]
+          const spacing = Math.min(40, netH / (count + 1))
+          const startY = netY + (netH - count * spacing) / 2
+          return { x: layerX, y: startY + index * spacing + spacing / 2 }
+        }
 
-            const isLast = currentIndex === rounds.length - 1
-            nextBtn.textContent = isLast
-              ? i18n.t('ch08.s02_next').replace('→', '✓')
-              : i18n.t('ch08.s02_next')
-            nextBtn.style.display = 'inline-block'
+        // Draw connections
+        connections.forEach(conn => {
+          const from = nodePos(conn.fromLayer, conn.fromNode)
+          const to = nodePos(conn.toLayer, conn.toNode)
+          c.strokeStyle = `rgba(74, 144, 217, ${conn.weight})`
+          c.lineWidth = conn.weight * 3
+          c.beginPath()
+          c.moveTo(from.x, from.y)
+          c.lineTo(to.x, to.y)
+          c.stroke()
+        })
 
-            nextBtn.onclick = () => {
-              currentIndex++
-              if (currentIndex >= rounds.length) {
-                bus.emit('scene:advance')
-              } else {
-                renderRound()
-              }
-            }
-          })
+        // Draw nodes
+        nodes.forEach(node => {
+          const pos = nodePos(node.layer, node.index)
+          c.fillStyle = `rgba(74, 144, 217, ${0.3 + node.activation * 0.7})`
+          c.beginPath()
+          c.arc(pos.x, pos.y, 8, 0, Math.PI * 2)
+          c.fill()
+          c.strokeStyle = '#4A90D9'
+          c.lineWidth = 1.5
+          c.stroke()
+        })
 
+        // Progress bar
+        const barY = netY + netH + 20
+        c.fillStyle = 'rgba(0,0,0,0.06)'
+        c.fillRect(30, barY, w - 60, 20)
+        c.fillStyle = '#4A90D9'
+        c.fillRect(30, barY, (collected / rounds.length) * (w - 60), 20)
+        c.font = '12px JetBrains Mono'
+        c.fillStyle = '#666'
+        c.textAlign = 'center'
+        c.fillText(ctx.i18n.t('ch08.s02_preferences_collected', { count: collected }), w / 2, barY + 14)
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      function updateNetwork() {
+        // Simulate learning — increase weights and activations
+        connections.forEach(conn => {
+          conn.weight = Math.min(0.9, conn.weight + 0.05 + Math.random() * 0.05)
+        })
+        nodes.forEach(node => {
+          node.activation = Math.min(1, node.activation + 0.1 + Math.random() * 0.1)
+        })
+      }
+
+      // Panel content
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch08.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch08.s01_text2')
+      sv.panel.appendChild(desc)
+
+      const roundLabel = document.createElement('div')
+      roundLabel.className = 'score-badge'
+      sv.panel.appendChild(roundLabel)
+
+      const promptEl = document.createElement('p')
+      promptEl.style.cssText = 'font-style: italic; color: var(--accent); margin: 8px 0;'
+      sv.panel.appendChild(promptEl)
+
+      const cardsDiv = document.createElement('div')
+      cardsDiv.style.cssText = 'display: flex; gap: 10px; margin: 12px 0;'
+      sv.panel.appendChild(cardsDiv)
+
+      const feedbackEl = document.createElement('p')
+      feedbackEl.style.cssText = 'font-size: 15px; color: var(--text-muted); min-height: 40px;'
+      sv.panel.appendChild(feedbackEl)
+
+      function renderRound() {
+        const round = rounds[roundIdx]
+        roundLabel.textContent = ctx.i18n.t('ch08.s02_round', { current: roundIdx + 1, total: rounds.length })
+        promptEl.textContent = ctx.i18n.t('ch08.s02_prompt_label') + ' ' + round.prompt
+        feedbackEl.textContent = ''
+        cardsDiv.innerHTML = ''
+
+        // Remove any leftover next button
+        sv.panel.querySelectorAll('.scene-btn').forEach(b => b.remove())
+
+        const makeCard = (label, text, side) => {
+          const card = document.createElement('div')
+          card.className = 'compare-card'
+          const lbl = document.createElement('div')
+          lbl.className = 'compare-label'
+          lbl.textContent = label
+          const txt = document.createElement('div')
+          txt.className = 'compare-text'
+          txt.textContent = text
+          txt.style.cssText = 'font-size: 14px; white-space: pre-wrap;'
+          card.appendChild(lbl)
+          card.appendChild(txt)
+          card.addEventListener('click', () => handlePick(side))
           return card
         }
 
-        const cardA = makeCard(i18n.t('ch08.s02_response_a'), round.responseA, 'A')
-        const cardB = makeCard(i18n.t('ch08.s02_response_b'), round.responseB, 'B')
-        const allCards = [[cardA, 'A'], [cardB, 'B']]
+        const cardA = makeCard(ctx.i18n.t('ch08.s02_response_a'), round.responseA, 'A')
+        const cardB = makeCard(ctx.i18n.t('ch08.s02_response_b'), round.responseB, 'B')
+        cardsDiv.appendChild(cardA)
+        cardsDiv.appendChild(cardB)
+      }
 
-        cardsRow.appendChild(cardA)
-        cardsRow.appendChild(cardB)
+      function handlePick(picked) {
+        const round = rounds[roundIdx]
+        collected++
+        updateNetwork()
+
+        // Disable cards
+        cardsDiv.querySelectorAll('.compare-card').forEach(card => {
+          card.style.pointerEvents = 'none'
+        })
+
+        const isCorrect = picked === round.better
+        feedbackEl.textContent = (isCorrect
+          ? ctx.i18n.t('ch08.s02_correct')
+          : ctx.i18n.t('ch08.s02_different')) + ' ' + round.reason
+        feedbackEl.className = 'fade-in'
+
+        // Highlight correct/wrong cards
+        const cards = cardsDiv.querySelectorAll('.compare-card')
+        const correctIdx = round.better === 'A' ? 0 : 1
+        cards[correctIdx].classList.add('picked-correct')
+        if (!isCorrect) {
+          cards[correctIdx === 0 ? 1 : 0].classList.add('picked-wrong')
+        }
+
+        const nextBtn = document.createElement('button')
+        nextBtn.className = 'scene-btn fade-in'
+        nextBtn.style.marginTop = '8px'
+
+        if (roundIdx < rounds.length - 1) {
+          nextBtn.textContent = ctx.i18n.t('ch08.s02_next')
+          nextBtn.addEventListener('click', () => {
+            roundIdx++
+            nextBtn.remove()
+            renderRound()
+          })
+        } else {
+          nextBtn.textContent = ctx.i18n.t('ch08.s03_btn')
+          nextBtn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+        }
+        sv.panel.appendChild(nextBtn)
       }
 
       renderRound()
+      draw()
 
-      return { wrapper }
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 3: Narrative — reward model explained
+  // Scene 2: Reward Hacking [Split-View]
   {
-    id: 'ch08-s03-reward-model',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch08.s03_text')
-      await ctx.narrator.ask('ch08.s03_text', [
-        { key: 'ch08.s03_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 4: Interactive — reward hacking demo
-  {
-    id: 'ch08-s04-hacking',
+    id: 'ch08-s02-hacking',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n } = ctx
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let honestScore = 0
+      let hackedScore = 0
+      let animating = false
+      let warning = false
+      let t = 0
+
       const { rewardHacking } = prefData
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch08-hacking-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 780px;
-        display: flex; flex-direction: column; align-items: center; gap: 20px;
-      `
-
-      // Intro text
-      const introText = document.createElement('div')
-      introText.textContent = i18n.t('ch08.s04_text')
-      introText.style.cssText = `
-        font-family: var(--font-hand); font-size: 19px; color: var(--text);
-        text-align: center; line-height: 1.6; max-width: 640px;
-      `
-
-      // Prompt box
-      const promptBox = document.createElement('div')
-      promptBox.style.cssText = `
-        width: 100%; padding: 12px 18px; border-radius: 10px;
-        background: rgba(var(--accent-rgb, 255,140,0), 0.12);
-        border: 2px solid var(--accent); box-sizing: border-box;
-        display: flex; gap: 10px; align-items: baseline;
-      `
-      const pLabel = document.createElement('span')
-      pLabel.textContent = i18n.t('ch08.s02_prompt_label')
-      pLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 13px; color: var(--accent);
-        font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap;
-      `
-      const pText = document.createElement('span')
-      pText.textContent = rewardHacking.prompt
-      pText.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--text);
-      `
-      promptBox.appendChild(pLabel)
-      promptBox.appendChild(pText)
-
-      // Cards row
-      const cardsRow = document.createElement('div')
-      cardsRow.style.cssText = `
-        display: flex; flex-direction: row; gap: 16px; width: 100%;
-      `
-
-      const makeResponseCard = (labelKey, text, score, scoreColor, borderColor) => {
-        const card = document.createElement('div')
-        card.style.cssText = `
-          flex: 1; padding: 18px; border-radius: 12px;
-          border: 2.5px solid ${borderColor}; background: var(--bg);
-          display: flex; flex-direction: column; gap: 10px; box-sizing: border-box;
-        `
-
-        const cardLabel = document.createElement('div')
-        cardLabel.textContent = i18n.t(labelKey)
-        cardLabel.style.cssText = `
-          font-family: var(--font-hand); font-size: 13px; color: ${borderColor};
-          font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
-        `
-
-        const cardText = document.createElement('div')
-        cardText.style.cssText = `
-          font-family: var(--font-hand); font-size: 15px; line-height: 1.6; color: var(--text); flex: 1;
-        `
-        cardText.textContent = text
-
-        const scoreBar = document.createElement('div')
-        scoreBar.style.cssText = `
-          margin-top: 6px; padding-top: 10px;
-          border-top: 1px dashed rgba(128,128,128,0.3);
-          display: flex; align-items: center; gap: 10px;
-        `
-
-        const scoreLabel = document.createElement('div')
-        scoreLabel.textContent = i18n.t('ch08.s04_score', { score })
-        scoreLabel.style.cssText = `
-          font-family: var(--font-hand); font-size: 16px; font-weight: bold; color: ${scoreColor};
-          white-space: nowrap;
-        `
-
-        const barTrack = document.createElement('div')
-        barTrack.style.cssText = `
-          flex: 1; height: 10px; border-radius: 5px;
-          background: rgba(128,128,128,0.2); overflow: hidden;
-        `
-        const barFill = document.createElement('div')
-        barFill.style.cssText = `
-          height: 100%; border-radius: 5px; background: ${scoreColor};
-          width: ${score}%; transition: width 0.8s ease;
-        `
-        barTrack.appendChild(barFill)
-
-        scoreBar.appendChild(scoreLabel)
-        scoreBar.appendChild(barTrack)
-
-        card.appendChild(cardLabel)
-        card.appendChild(cardText)
-        card.appendChild(scoreBar)
-
-        return card
+      function wrapText(context, text, maxW) {
+        const words = text.split(' ')
+        const lines = []
+        let line = ''
+        words.forEach(word => {
+          const test = line + word + ' '
+          if (context.measureText(test).width > maxW) {
+            lines.push(line.trim())
+            line = word + ' '
+          } else {
+            line = test
+          }
+        })
+        if (line.trim()) lines.push(line.trim())
+        return lines
       }
 
-      const honestCard = makeResponseCard('ch08.s04_honest_label', rewardHacking.honest, 42, '#22c55e', '#22c55e')
-      const hackedCard = makeResponseCard('ch08.s04_hacked_label', rewardHacking.hacked, 91, '#ef4444', '#ef4444')
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
+        t++
 
-      cardsRow.appendChild(honestCard)
-      cardsRow.appendChild(hackedCard)
+        // Two score gauges side by side
+        const gaugeW = (w - 60) / 2
+        const gaugeH = 30
+        const gaugeY = h * 0.4
 
-      // Explanation
-      const explainText = document.createElement('div')
-      explainText.textContent = i18n.t('ch08.s04_text2')
-      explainText.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--text);
-        text-align: center; line-height: 1.6; max-width: 640px;
-      `
+        // --- Honest gauge ---
+        c.font = 'bold 14px JetBrains Mono'
+        c.fillStyle = '#5BA55B'
+        c.textAlign = 'center'
+        c.fillText(ctx.i18n.t('ch08.s04_honest_label'), 20 + gaugeW / 2, gaugeY - 15)
 
-      // Advance button
-      const advBtn = document.createElement('button')
-      advBtn.className = 'narrator-btn'
-      advBtn.textContent = i18n.t('ch08.s04_btn')
-      advBtn.onclick = () => bus.emit('scene:advance')
+        c.fillStyle = 'rgba(0,0,0,0.06)'
+        c.fillRect(20, gaugeY, gaugeW, gaugeH)
+        c.fillStyle = '#5BA55B'
+        c.fillRect(20, gaugeY, (honestScore / 100) * gaugeW, gaugeH)
 
-      wrapper.appendChild(introText)
-      wrapper.appendChild(promptBox)
-      wrapper.appendChild(cardsRow)
-      wrapper.appendChild(explainText)
-      wrapper.appendChild(advBtn)
-      document.getElementById('app').appendChild(wrapper)
+        c.fillStyle = '#5BA55B'
+        c.fillText(ctx.i18n.t('ch08.s04_score', { score: Math.floor(honestScore) }), 20 + gaugeW / 2, gaugeY + gaugeH + 20)
 
-      return { wrapper }
+        // --- Hacked gauge ---
+        const hx = 40 + gaugeW
+        const hackedColor = warning ? (t % 20 < 10 ? '#D4645C' : '#E8913A') : '#E8913A'
+
+        c.fillStyle = hackedColor
+        c.fillText(ctx.i18n.t('ch08.s04_hacked_label'), hx + gaugeW / 2, gaugeY - 15)
+
+        c.fillStyle = 'rgba(0,0,0,0.06)'
+        c.fillRect(hx, gaugeY, gaugeW, gaugeH)
+        c.fillStyle = warning ? '#D4645C' : '#E8913A'
+        c.fillRect(hx, gaugeY, (hackedScore / 100) * gaugeW, gaugeH)
+
+        c.fillStyle = warning ? '#D4645C' : '#E8913A'
+        c.fillText(ctx.i18n.t('ch08.s04_score', { score: Math.floor(hackedScore) }), hx + gaugeW / 2, gaugeY + gaugeH + 20)
+
+        // Warning flash when hacking detected
+        if (warning && t % 30 < 15) {
+          c.strokeStyle = '#D4645C'
+          c.lineWidth = 3
+          c.strokeRect(hx - 2, gaugeY - 2, gaugeW + 4, gaugeH + 4)
+          c.font = 'bold 20px Caveat'
+          c.fillStyle = '#D4645C'
+          c.fillText('⚠️ REWARD HACKING!', w / 2, gaugeY + gaugeH + 55)
+        }
+
+        // Response text previews
+        const previewY = gaugeY + gaugeH + 75
+
+        c.font = '12px JetBrains Mono'
+        c.fillStyle = '#666'
+        c.textAlign = 'left'
+        c.fillText('Honest:', 20, previewY)
+        c.font = '11px JetBrains Mono'
+        const honestLines = wrapText(c, rewardHacking.honest, gaugeW - 10)
+        honestLines.slice(0, 3).forEach((line, i) => {
+          c.fillText(line, 20, previewY + 18 + i * 15)
+        })
+
+        c.font = '12px JetBrains Mono'
+        c.fillStyle = '#666'
+        c.fillText('Hacked:', hx, previewY)
+        c.font = '11px JetBrains Mono'
+        const hackedLines = wrapText(c, rewardHacking.hacked, gaugeW - 10)
+        hackedLines.slice(0, 3).forEach((line, i) => {
+          c.fillText(line, hx, previewY + 18 + i * 15)
+        })
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // Panel content
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch08.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch08.s04_text')
+      sv.panel.appendChild(desc)
+
+      const raceBtn = document.createElement('button')
+      raceBtn.className = 'scene-btn'
+      raceBtn.textContent = 'Race! →'
+      sv.panel.appendChild(raceBtn)
+
+      const desc2 = document.createElement('p')
+      desc2.style.cssText = 'font-size: 16px; color: var(--text-muted); min-height: 40px; display: none;'
+      desc2.textContent = rewardHacking.explanation
+      sv.panel.appendChild(desc2)
+
+      raceBtn.addEventListener('click', async () => {
+        if (animating) return
+        animating = true
+        raceBtn.disabled = true
+
+        // Animate both scores racing up
+        for (let i = 0; i <= 40; i++) {
+          honestScore = Math.min(42, i * 1.05)
+          hackedScore = Math.min(91, i * 2.3)
+          if (hackedScore > 60) warning = true
+          await sleep(50)
+        }
+
+        desc2.style.display = ''
+        desc2.className = 'fade-in'
+
+        raceBtn.textContent = ctx.i18n.t('ch08.s04_btn')
+        raceBtn.disabled = false
+        raceBtn.onclick = () => ctx.bus.emit('scene:advance')
+      })
+
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 5: Narrative — BUT + transition to ch09
+  // Scene 3: Wrap-up [Narrative]
   {
-    id: 'ch08-s05-but',
+    id: 'ch08-s03-wrapup',
     type: 'narrative',
     async enter(ctx) {
       await ctx.narrator.say('ch08.s05_text')
@@ -411,5 +406,5 @@ export default [
     exit(_, ctx) {
       ctx?.narrator?.clear()
     }
-  },
+  }
 ]
