@@ -269,6 +269,54 @@ export class Landing {
     this._overlay.appendChild(this._btnArea);
     this._refreshButtons();
 
+    // Credits
+    const credits = document.createElement('div');
+    Object.assign(credits.style, {
+      marginTop: '40px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+      pointerEvents: 'all',
+      fontSize: '14px',
+      fontFamily: "'LXGW WenKai', cursive",
+      color: '#999',
+    });
+
+    const byLink = document.createElement('a');
+    byLink.href = 'https://ursb.me';
+    byLink.target = '_blank';
+    byLink.rel = 'noopener';
+    byLink.textContent = 'by Airing';
+    Object.assign(byLink.style, {
+      color: '#888',
+      textDecoration: 'none',
+      transition: 'color 0.2s',
+    });
+    byLink.addEventListener('mouseenter', () => byLink.style.color = '#4A90D9');
+    byLink.addEventListener('mouseleave', () => byLink.style.color = '#888');
+    credits.appendChild(byLink);
+
+    const sep = document.createElement('span');
+    sep.textContent = '·';
+    sep.style.color = '#ccc';
+    credits.appendChild(sep);
+
+    const ghLink = document.createElement('a');
+    ghLink.href = 'https://github.com/airingursb/how-to-train-your-llm';
+    ghLink.target = '_blank';
+    ghLink.rel = 'noopener';
+    ghLink.textContent = 'GitHub';
+    Object.assign(ghLink.style, {
+      color: '#888',
+      textDecoration: 'none',
+      transition: 'color 0.2s',
+    });
+    ghLink.addEventListener('mouseenter', () => ghLink.style.color = '#4A90D9');
+    ghLink.addEventListener('mouseleave', () => ghLink.style.color = '#888');
+    credits.appendChild(ghLink);
+
+    this._overlay.appendChild(credits);
+
     // Event listeners
     window.addEventListener('resize',     this._boundResize);
     window.addEventListener('mousemove',  this._boundMouseMove);
