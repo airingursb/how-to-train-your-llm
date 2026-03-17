@@ -151,7 +151,7 @@ export default [
         const halfW = w / 2
 
         // Labels
-        c.font = 'bold 16px Caveat, sans-serif'
+        c.font = 'bold 16px LXGW WenKai, sans-serif'
         c.textAlign = 'center'
         c.fillStyle = '#D4645C'
         c.fillText('Base Model', halfW / 2, 25)

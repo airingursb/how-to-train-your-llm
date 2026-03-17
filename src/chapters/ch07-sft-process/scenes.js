@@ -81,7 +81,7 @@ export default [
             }
           } else {
             // Empty slot label
-            c.font = '15px Caveat, cursive'
+            c.font = '15px LXGW WenKai, cursive'
             c.fillStyle = slotColors[i]
             c.textAlign = 'center'
             c.fillText((i + 1) + '. ' + label, w / 2, y + 36)
@@ -296,7 +296,7 @@ export default [
           c.fillText(ann.name[0], cx, avatarY + 6)
 
           // Name
-          c.font = 'bold 14px Caveat, cursive'
+          c.font = 'bold 14px LXGW WenKai, cursive'
           c.fillStyle = ann.color
           c.fillText(ann.name, cx, avatarY + 42)
 

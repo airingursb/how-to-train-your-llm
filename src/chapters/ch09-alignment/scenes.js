@@ -51,7 +51,7 @@ export default [
         c.stroke()
 
         // Vertex labels
-        c.font = 'bold 14px Caveat'
+        c.font = 'bold 14px LXGW WenKai'
         c.textAlign = 'center'
         c.fillStyle = '#4A90D9'
         c.fillText(ctx.i18n.t('ch09.s03_helpfulness'), triTop.x, triTop.y - 8)

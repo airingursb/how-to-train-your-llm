@@ -235,7 +235,7 @@ export class Landing {
       lineHeight: '0.95',
       textAlign: 'center',
       marginBottom: '16px',
-      fontFamily: "'Caveat', cursive",
+      fontFamily: "'LXGW WenKai', cursive",
       pointerEvents: 'none',
       color: '#2D2D2D',
     });
@@ -248,7 +248,7 @@ export class Landing {
     const subtitleText = this._i18n ? this._i18n.t('landing.subtitle') : 'an interactive guide to building a language model from scratch';
     const subtitle = document.createElement('div');
     Object.assign(subtitle.style, {
-      fontFamily: "'Caveat', cursive",
+      fontFamily: "'LXGW WenKai', cursive",
       fontSize: 'clamp(18px, 2.5vw, 28px)',
       color: '#888',
       textAlign: 'center',
@@ -297,7 +297,7 @@ export class Landing {
       const b = document.createElement('button');
       Object.assign(b.style, {
         pointerEvents: 'all',
-        fontFamily: "'Caveat', cursive",
+        fontFamily: "'LXGW WenKai', cursive",
         fontSize: primary ? '28px' : '20px',
         padding: primary ? '14px 48px' : '8px 32px',
         background: 'none',
@@ -332,7 +332,7 @@ export class Landing {
 
       const congrats = document.createElement('div');
       Object.assign(congrats.style, {
-        fontFamily: "'Caveat', cursive",
+        fontFamily: "'LXGW WenKai', cursive",
         fontSize: 'clamp(28px, 4vw, 42px)',
         fontWeight: '700',
         color: '#2D2D2D',
@@ -345,7 +345,7 @@ export class Landing {
 
       const completeMsg = document.createElement('div');
       Object.assign(completeMsg.style, {
-        fontFamily: "'Caveat', cursive",
+        fontFamily: "'LXGW WenKai', cursive",
         fontSize: 'clamp(16px, 2vw, 22px)',
         color: '#888',
         textAlign: 'center',

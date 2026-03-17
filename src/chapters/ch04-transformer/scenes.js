@@ -221,14 +221,14 @@ export default [
         }
 
         if (layerCount > maxVisible) {
-          c.font = '14px Caveat'
+          c.font = '14px LXGW WenKai'
           c.fillStyle = '#888'
           c.textAlign = 'center'
           c.fillText(`... ${layerCount - maxVisible} more layers ...`, w / 2, startY - 10)
         }
 
         // Layer count label
-        c.font = 'bold 28px Caveat'
+        c.font = 'bold 28px LXGW WenKai'
         c.fillStyle = '#2D2D2D'
         c.textAlign = 'center'
         c.fillText(`${layerCount} layer${layerCount > 1 ? 's' : ''}`, w / 2, h - 15)

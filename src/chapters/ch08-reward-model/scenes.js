@@ -53,7 +53,7 @@ export default [
         c.clearRect(0, 0, w, h)
 
         // Title
-        c.font = 'bold 16px Caveat'
+        c.font = 'bold 16px LXGW WenKai'
         c.fillStyle = '#888'
         c.textAlign = 'center'
         c.fillText('Reward Model', w / 2, 25)
@@ -310,7 +310,7 @@ export default [
           c.strokeStyle = '#D4645C'
           c.lineWidth = 3
           c.strokeRect(hx - 2, gaugeY - 2, gaugeW + 4, gaugeH + 4)
-          c.font = 'bold 20px Caveat'
+          c.font = 'bold 20px LXGW WenKai'
           c.fillStyle = '#D4645C'
           c.fillText('⚠️ REWARD HACKING!', w / 2, gaugeY + gaugeH + 55)
         }

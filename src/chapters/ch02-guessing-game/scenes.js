@@ -30,7 +30,7 @@ export default [
         c.clearRect(0, 0, w, h)
 
         // Title
-        c.font = 'bold 20px Caveat, cursive'
+        c.font = 'bold 20px LXGW WenKai, cursive'
         c.fillStyle = '#2D2D2D'
         c.textAlign = 'center'
         c.fillText('Score Race', w / 2, 40)
@@ -41,7 +41,7 @@ export default [
         const barH = 30
 
         // Player bar
-        c.font = '16px Caveat, cursive'
+        c.font = '16px LXGW WenKai, cursive'
         c.textAlign = 'right'
         c.fillStyle = '#4A90D9'
         c.fillText(ctx.i18n.t('ch02.s02_you'), barX - 8, 90)

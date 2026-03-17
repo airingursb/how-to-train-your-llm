@@ -89,7 +89,7 @@ export default [
         })
 
         // Instructions on canvas
-        c.font = '13px Caveat, cursive'
+        c.font = '13px LXGW WenKai, cursive'
         c.fillStyle = '#888'
         c.textAlign = 'center'
         c.fillText(`Click tokens to draw attention from "${sent.queryWord}"`, w / 2, h * 0.15)
@@ -441,7 +441,7 @@ export default [
         }
 
         // Head label
-        c.font = 'bold 16px Caveat, cursive'
+        c.font = 'bold 16px LXGW WenKai, cursive'
         c.fillStyle = color
         c.textAlign = 'center'
         c.fillText(`Head ${activeHead + 1}: ${head.name}`, w / 2, 30)
