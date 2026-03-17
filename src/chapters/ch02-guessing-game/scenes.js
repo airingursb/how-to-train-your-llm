@@ -20,8 +20,9 @@ export default [
       let playerScore = 0
       let bigramScore = 0
       let showingResult = false
+      let cachedProbs = null // pre-computed random probs for non-chosen options
 
-      // Canvas: scoreboard + context display
+      // Canvas: context sentence + bigram probability bars
       function draw() {
         const w = canvas.width / dpr
         const h = canvas.height / dpr
@@ -29,53 +30,46 @@ export default [
         c.scale(dpr, dpr)
         c.clearRect(0, 0, w, h)
 
-        // Title
-        c.font = 'bold 20px LXGW WenKai, cursive'
-        c.fillStyle = '#2D2D2D'
+        // ── Scoreboard (compact, top) ──
+        const scoreY = 30
+        c.font = 'bold 16px LXGW WenKai, cursive'
         c.textAlign = 'center'
-        c.fillText('Score Race', w / 2, 40)
 
-        // Score bars
-        const barX = 60
-        const barW = w - 120
-        const barH = 30
+        // Player score dots
+        const dotR = 10, dotGap = 28
+        const totalDotsW = 5 * dotGap
+        const startX = (w - totalDotsW) / 2
 
-        // Player bar
-        c.font = '16px LXGW WenKai, cursive'
-        c.textAlign = 'right'
         c.fillStyle = '#4A90D9'
-        c.fillText(ctx.i18n.t('ch02.s02_you'), barX - 8, 90)
-        c.fillStyle = 'rgba(74, 144, 217, 0.15)'
-        c.fillRect(barX, 75, barW, barH)
-        c.fillStyle = '#4A90D9'
-        c.fillRect(barX, 75, (playerScore / 5) * barW, barH)
-        c.fillStyle = '#fff'
-        c.textAlign = 'center'
-        if (playerScore > 0) c.fillText(playerScore + '', barX + (playerScore / 5) * barW / 2, 95)
+        c.fillText(ctx.i18n.t('ch02.s02_you'), startX - 8, scoreY + 5)
+        for (let i = 0; i < 5; i++) {
+          const dx = startX + 40 + i * dotGap
+          c.beginPath()
+          c.arc(dx, scoreY, dotR, 0, Math.PI * 2)
+          c.fillStyle = i < playerScore ? '#4A90D9' : 'rgba(74, 144, 217, 0.15)'
+          c.fill()
+        }
 
-        // Bigram bar
-        c.textAlign = 'right'
         c.fillStyle = '#E8913A'
-        c.fillText(ctx.i18n.t('ch02.s02_bigram'), barX - 8, 140)
-        c.fillStyle = 'rgba(232, 145, 58, 0.15)'
-        c.fillRect(barX, 125, barW, barH)
-        c.fillStyle = '#E8913A'
-        c.fillRect(barX, 125, (bigramScore / 5) * barW, barH)
-        c.fillStyle = '#fff'
-        c.textAlign = 'center'
-        if (bigramScore > 0) c.fillText(bigramScore + '', barX + (bigramScore / 5) * barW / 2, 145)
+        c.fillText(ctx.i18n.t('ch02.s02_bigram'), startX - 8, scoreY + 35)
+        for (let i = 0; i < 5; i++) {
+          const dx = startX + 40 + i * dotGap
+          c.beginPath()
+          c.arc(dx, scoreY + 30, dotR, 0, Math.PI * 2)
+          c.fillStyle = i < bigramScore ? '#E8913A' : 'rgba(232, 145, 58, 0.15)'
+          c.fill()
+        }
 
-        // Context sentence display
+        // ── Context sentence (center) ──
         if (roundIdx < rounds.length) {
           const round = rounds[roundIdx]
           c.font = '22px JetBrains Mono, monospace'
           c.fillStyle = '#2D2D2D'
           c.textAlign = 'center'
 
-          // Word-wrap the context
           const contextWords = round.context.split(' ')
           let line = ''
-          let lineY = h * 0.55
+          let lineY = h * 0.35
           contextWords.forEach(word => {
             const test = line + word + ' '
             if (c.measureText(test).width > w - 60) {
@@ -88,30 +82,56 @@ export default [
           })
           c.fillText(line.trim(), w / 2, lineY)
 
-          // Blank
+          // Blank indicator
           c.fillStyle = '#4A90D9'
           c.fillText('____', w / 2, lineY + 40)
         }
 
-        // Bigram probability bars (when showing result)
+        // ── Bigram probability bars (bottom, shown after answer) ──
         if (showingResult && roundIdx < rounds.length) {
           const round = rounds[roundIdx]
-          const by = h * 0.78
-          c.font = '12px JetBrains Mono, monospace'
+          const barAreaY = h * 0.6
+          const barH = 18
+          const barGap = 28
+          const maxBarW = w - 180
+
+          c.font = '13px LXGW WenKai, cursive'
           c.fillStyle = '#888'
           c.textAlign = 'left'
-          c.fillText(`Bigram sees: "${round.bigramPrev}" \u2192`, 20, by)
+          c.fillText(`Bigram: "${round.bigramPrev}" →`, 20, barAreaY - 4)
 
           round.options.forEach((opt, i) => {
-            const oy = by + 18 + i * 22
-            const prob = opt === round.bigramChoice ? round.bigramProb : Math.random() * 0.1
-            c.fillStyle = opt === round.bigramChoice ? '#E8913A' : 'rgba(232,145,58,0.2)'
-            c.fillRect(120, oy, prob * (w - 200), 16)
-            c.fillStyle = '#666'
+            const oy = barAreaY + 12 + i * barGap
+            const prob = cachedProbs ? cachedProbs[opt] : 0
+            const barW = prob * maxBarW
+
+            // Label
+            c.font = '13px JetBrains Mono, monospace'
+            c.fillStyle = '#555'
             c.textAlign = 'left'
-            c.fillText(opt, 20, oy + 12)
+            c.fillText(opt, 20, oy + 13)
+
+            // Bar
+            c.fillStyle = opt === round.bigramChoice
+              ? '#E8913A'
+              : 'rgba(232, 145, 58, 0.25)'
+            const rx = 90, ry = oy, rw = Math.max(barW, 2), rh = barH, radius = 3
+            c.beginPath()
+            c.moveTo(rx + radius, ry)
+            c.lineTo(rx + rw - radius, ry)
+            c.quadraticCurveTo(rx + rw, ry, rx + rw, ry + radius)
+            c.lineTo(rx + rw, ry + rh - radius)
+            c.quadraticCurveTo(rx + rw, ry + rh, rx + rw - radius, ry + rh)
+            c.lineTo(rx + radius, ry + rh)
+            c.quadraticCurveTo(rx, ry + rh, rx, ry + rh - radius)
+            c.lineTo(rx, ry + radius)
+            c.quadraticCurveTo(rx, ry, rx + radius, ry)
+            c.fill()
+
+            // Percentage
+            c.fillStyle = '#888'
             c.textAlign = 'right'
-            c.fillText((prob * 100).toFixed(0) + '%', w - 20, oy + 12)
+            c.fillText((prob * 100).toFixed(0) + '%', w - 20, oy + 13)
           })
         }
 
@@ -146,6 +166,7 @@ export default [
 
       function renderRound() {
         showingResult = false
+        cachedProbs = null
         const round = rounds[roundIdx]
         roundLabel.textContent = ctx.i18n.t('ch02.s02_round', { current: roundIdx + 1, total: rounds.length })
         prompt.textContent = ctx.i18n.t('ch02.s02_pick')
@@ -168,6 +189,14 @@ export default [
       function handlePick(picked) {
         const round = rounds[roundIdx]
         showingResult = true
+
+        // Pre-compute stable probabilities for display
+        cachedProbs = {}
+        round.options.forEach(opt => {
+          cachedProbs[opt] = opt === round.bigramChoice
+            ? round.bigramProb
+            : 0.02 + Math.random() * 0.08
+        })
 
         // Disable all buttons
         choicesDiv.querySelectorAll('.choice-card').forEach(b => {
