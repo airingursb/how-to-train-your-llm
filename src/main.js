@@ -7,7 +7,11 @@ import { AudioManager } from './core/audio.js'
 import { SceneManager } from './core/scene-manager.js'
 import { Landing } from './landing.js'
 
-const CHAPTER_IDS = ['ch00','ch01','ch02','ch03','ch04','ch05','ch06','ch07','ch08','ch09']
+const CHAPTER_IDS = [
+  'ch00-magic-trick','ch01-tokenization','ch02-guessing-game','ch03-attention',
+  'ch04-transformer','ch05-pretraining','ch06-sft-motivation','ch07-sft-process',
+  'ch08-reward-model','ch09-alignment',
+]
 
 const CHAPTERS = [
   () => import('./chapters/ch00-magic-trick/index.js'),

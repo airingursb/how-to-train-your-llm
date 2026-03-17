@@ -284,7 +284,11 @@ export class Landing {
     if (!this._btnArea) return;
     this._btnArea.innerHTML = '';
 
-    const CHAPTER_IDS = ['ch00','ch01','ch02','ch03','ch04','ch05','ch06','ch07','ch08','ch09'];
+    const CHAPTER_IDS = [
+      'ch00-magic-trick','ch01-tokenization','ch02-guessing-game','ch03-attention',
+      'ch04-transformer','ch05-pretraining','ch06-sft-motivation','ch07-sft-process',
+      'ch08-reward-model','ch09-alignment',
+    ];
     const completed   = this._state ? this._state.getCompletedChapters() : [];
     const allDone     = completed.length >= CHAPTER_IDS.length;
     const hasProg     = completed.length > 0;

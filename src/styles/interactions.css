@@ -234,7 +234,7 @@
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .step-dot.active {
@@ -255,6 +255,7 @@
   height: 2px;
   background: var(--text-muted);
   max-width: 30px;
+  transition: background 0.3s ease;
 }
 
 .step-line.complete {
@@ -311,15 +312,6 @@
 /* === Button press effect === */
 .scene-btn:active {
   transform: scale(0.96);
-}
-
-/* === Smooth step transitions === */
-.step-dot {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.step-line {
-  transition: background 0.3s ease;
 }
 
 /* === Card selection glow === */

@@ -97,8 +97,7 @@ export default [
             } else {
               nextBtn.textContent = '→'
               nextBtn.addEventListener('click', () => {
-                ctx.state = ctx.state || {}
-                ctx.state.ch06_score = score
+                ctx.state.setSetting('ch06_score', score)
                 ctx.bus.emit('scene:advance')
               })
             }
@@ -226,7 +225,7 @@ export default [
       title.textContent = ctx.i18n.t('ch06.title')
       sv.panel.appendChild(title)
 
-      const score = ctx.state?.ch06_score ?? 0
+      const score = ctx.state.getSetting('ch06_score') ?? 0
       const desc = document.createElement('p')
       desc.textContent = ctx.i18n.t('ch06.s03_text', { score })
       sv.panel.appendChild(desc)
