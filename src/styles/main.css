@@ -63,11 +63,13 @@ html, body {
 
 #narrator-container {
   position: absolute;
-  bottom: 60px;
+  top: 0;
   left: 0;
   width: 100%;
+  height: calc(100% - 50px); /* above footer */
   z-index: 5;
   display: flex;
+  align-items: center;
   justify-content: center;
 }
 

@@ -295,7 +295,6 @@ export default [
     async enter(ctx) {
       await ctx.narrator.say('ch04.s06_text')
       await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch04.s06_text2')
       await ctx.narrator.ask('ch04.s06_text2', [
         { key: 'ch04.s06_btn', action: () => ctx.bus.emit('chapter:complete', 'ch04-transformer') }
       ])

@@ -21,3 +21,4 @@ docs/
 *.png
 *.jpg
 /landing-*.png
+.superpowers/

@@ -4,6 +4,8 @@ export class Narrator {
     this._container = container
     this._i18n = i18n
     this._textEl = null
+    this._sizerEl = null
+    this._visibleEl = null
     this._choicesEl = null
     this._skipResolve = null
     this._typing = false
@@ -16,6 +18,17 @@ export class Narrator {
 
     this._textEl = document.createElement('div')
     this._textEl.classList.add('narrator-text')
+
+    // Sizer: invisible full text to reserve layout height
+    this._sizerEl = document.createElement('span')
+    this._sizerEl.classList.add('narrator-text-sizer')
+    this._textEl.appendChild(this._sizerEl)
+
+    // Visible: positioned over sizer, shows typewriter text
+    this._visibleEl = document.createElement('span')
+    this._visibleEl.classList.add('narrator-text-visible')
+    this._textEl.appendChild(this._visibleEl)
+
     this._container.appendChild(this._textEl)
 
     this._choicesEl = document.createElement('div')
@@ -34,17 +47,27 @@ export class Narrator {
     this._choicesEl.innerHTML = ''
     this._container.classList.add('visible')
 
+    // Cancel any in-progress typing
+    if (this._typing && this._skipResolve) {
+      this._skipResolve()
+    }
+
+    // Set full text in sizer to reserve height
+    this._sizerEl.innerHTML = text
+
     if (window.__reducedMotion) {
-      this._textEl.innerHTML = text
+      this._visibleEl.innerHTML = text
       return
     }
 
     this._typing = true
-    this._textEl.innerHTML = ''
+    this._visibleEl.innerHTML = ''
+    this._gen = (this._gen || 0) + 1
+    const gen = this._gen
 
     await new Promise((resolve) => {
       this._skipResolve = () => {
-        this._textEl.innerHTML = text
+        this._visibleEl.innerHTML = text
         this._typing = false
         this._skipResolve = null
         resolve()
@@ -53,11 +76,12 @@ export class Narrator {
       let i = 0
       const chars = text.split('')
       const type = () => {
+        if (gen !== this._gen) return // superseded by newer say()
         if (!this._typing) return
         if (i < chars.length) {
-          this._textEl.innerHTML += chars[i]
+          this._visibleEl.innerHTML += chars[i]
           i++
-          setTimeout(type, 30)
+          setTimeout(type, 50)
         } else {
           this._typing = false
           this._skipResolve = null
@@ -88,7 +112,8 @@ export class Narrator {
   }
 
   clear() {
-    this._textEl.innerHTML = ''
+    this._sizerEl.innerHTML = ''
+    this._visibleEl.innerHTML = ''
     this._choicesEl.innerHTML = ''
     this._container.classList.remove('visible')
     this._typing = false

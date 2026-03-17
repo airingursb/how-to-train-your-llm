@@ -360,7 +360,6 @@ export default [
     async enter(ctx) {
       await ctx.narrator.say('ch07.s05_text')
       await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch07.s05_text2')
       await ctx.narrator.ask('ch07.s05_text2', [
         { key: 'ch07.s05_btn', action: () => ctx.bus.emit('chapter:complete', 'ch07-sft-process') }
       ])

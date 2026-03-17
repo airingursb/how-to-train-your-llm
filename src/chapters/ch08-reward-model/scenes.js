@@ -398,7 +398,6 @@ export default [
     async enter(ctx) {
       await ctx.narrator.say('ch08.s05_text')
       await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch08.s05_text2')
       await ctx.narrator.ask('ch08.s05_text2', [
         { key: 'ch08.s05_btn', action: () => ctx.bus.emit('chapter:complete', 'ch08-reward-model') }
       ])

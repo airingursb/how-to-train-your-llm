@@ -465,7 +465,6 @@ export default [
     async enter(ctx) {
       await ctx.narrator.say('ch01.s05_text')
       await new Promise(r => setTimeout(r, 1000))
-      await ctx.narrator.say('ch01.s05_text2')
       await ctx.narrator.ask('ch01.s05_text2', [
         { key: 'ch01.s05_btn', action: () => ctx.bus.emit('chapter:complete', 'ch01-tokenization') }
       ])

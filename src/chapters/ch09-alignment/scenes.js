@@ -307,7 +307,6 @@ export default [
       await sleep(1000)
       await ctx.narrator.say('ch09.s06_text2')
       await sleep(500)
-      await ctx.narrator.say('ch09.s06_text3')
       await ctx.narrator.ask('ch09.s06_text3', [
         { key: 'ch09.s06_btn', action: () => ctx.bus.emit('chapter:complete', 'ch09-alignment') }
       ])

@@ -239,7 +239,6 @@ export default [
       await sleep(1500)
       await ctx.narrator.say('ch00.s04_text')
       await sleep(800)
-      await ctx.narrator.say('ch00.s04_text2')
       await ctx.narrator.ask('ch00.s04_text2', [
         { key: 'ch00.s04_btn', action: () => ctx.bus.emit('chapter:complete', 'ch00-magic-trick') }
       ])

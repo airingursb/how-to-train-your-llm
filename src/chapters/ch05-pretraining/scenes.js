@@ -389,7 +389,6 @@ export default [
     async enter(ctx) {
       await ctx.narrator.say('ch05.s06_text')
       await sleep(800)
-      await ctx.narrator.say('ch05.s06_text2')
       await ctx.narrator.ask('ch05.s06_text2', [
         { key: 'ch05.s06_btn', action: () => ctx.bus.emit('chapter:complete', 'ch05-pretraining') }
       ])
