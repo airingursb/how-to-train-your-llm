@@ -1,0 +1,297 @@
+/* === Choice Cards === */
+.choice-card {
+  padding: 12px 20px;
+  border: 2.5px solid var(--text);
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: var(--font-hand);
+  font-size: 18px;
+  transition: all 0.2s ease;
+  background: none;
+  color: var(--text);
+  text-align: center;
+}
+
+.choice-card:hover {
+  background: var(--accent-light);
+  transform: translateY(-2px);
+}
+
+.choice-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.choice-card.correct {
+  border-color: #5BA55B;
+  background: rgba(91, 165, 91, 0.15);
+  animation: flash-correct 0.4s ease;
+}
+
+.choice-card.wrong {
+  border-color: #D9534F;
+  background: rgba(217, 83, 79, 0.15);
+  animation: shake 0.4s ease;
+}
+
+@keyframes flash-correct {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* === Score Badge === */
+.score-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: bold;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+/* === Slider Row === */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-family: var(--font-hand);
+  font-size: 16px;
+}
+
+.slider-row label {
+  min-width: 100px;
+  color: var(--text);
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--text-muted);
+  border-radius: 3px;
+  outline: none;
+}
+
+.slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.slider-row .slider-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  min-width: 40px;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+/* === Heatmap Cell === */
+.heatmap-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.heatmap-cell:hover {
+  outline: 2px solid var(--accent);
+  z-index: 1;
+}
+
+/* === Drag & Drop === */
+.drag-item {
+  padding: 10px 18px;
+  border: 2.5px solid var(--text);
+  border-radius: 8px;
+  cursor: grab;
+  font-family: var(--font-hand);
+  font-size: 16px;
+  background: var(--bg);
+  color: var(--text);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.drag-item:active {
+  cursor: grabbing;
+  opacity: 0.7;
+}
+
+.drag-item.placed {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.drop-slot {
+  min-height: 48px;
+  border: 2.5px dashed var(--text-muted);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.drop-slot.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.drop-slot.filled {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.drop-slot.correct {
+  border-color: #5BA55B;
+  background: rgba(91, 165, 91, 0.1);
+  animation: flash-correct 0.4s ease;
+}
+
+.drop-slot.wrong {
+  animation: shake 0.4s ease;
+}
+
+/* === Compare Cards === */
+.compare-card {
+  flex: 1;
+  border: 2.5px solid var(--text-muted);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--font-hand);
+}
+
+.compare-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.compare-card .compare-label {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.compare-card .compare-text {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.compare-card.picked-correct {
+  border-color: #5BA55B;
+  background: rgba(91, 165, 91, 0.1);
+}
+
+.compare-card.picked-wrong {
+  border-color: #D9534F;
+  background: rgba(217, 83, 79, 0.1);
+}
+
+/* === Step Indicator === */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.step-dot.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+  transform: scale(1.1);
+}
+
+.step-dot.complete {
+  border-color: #5BA55B;
+  background: #5BA55B;
+  color: white;
+}
+
+.step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--text-muted);
+  max-width: 30px;
+}
+
+.step-line.complete {
+  background: #5BA55B;
+}
+
+/* === Status Feedback === */
+.status-ok {
+  color: #5BA55B;
+  font-weight: bold;
+}
+
+.status-warn {
+  color: #E8913A;
+  font-weight: bold;
+}
+
+.status-error {
+  color: #D9534F;
+  font-weight: bold;
+}
+
+/* === General Animation Utility === */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fade-in 0.3s ease forwards;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 144, 217, 0); }
+  50% { box-shadow: 0 0 12px 4px rgba(74, 144, 217, 0.3); }
+}
+
+.glow-pulse {
+  animation: glow-pulse 1.5s ease infinite;
+}
