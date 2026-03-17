@@ -1,347 +1,319 @@
-import simData from './data/alignment-sim.json'
+import { createSplitView } from '../../helpers/split-view.js'
+import { createSandboxControls } from '../../helpers/sandbox-controls.js'
+import { createStepThrough } from '../../helpers/step-through.js'
+import alignData from './data/alignment-sim.json'
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 export default [
-  // Scene 1: Narrative — RL intro
+  // Scene 1: Alignment Control Panel [Split-View + Sandbox]
   {
-    id: 'ch09-s01-intro',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch09.s01_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch09.s01_text2')
-      await ctx.narrator.ask('ch09.s01_text2', [
-        { key: 'ch09.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 2: Narrative — KL divergence
-  {
-    id: 'ch09-s02-kl',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch09.s02_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch09.s02_text2')
-      await ctx.narrator.ask('ch09.s02_text2', [
-        { key: 'ch09.s02_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 3: Interactive — alignment sandbox
-  {
-    id: 'ch09-s03-sandbox',
+    id: 'ch09-s01-sandbox',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n } = ctx
-      const { scenarios, sliderDefaults } = simData
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let values = { helpfulness: 50, harmlessness: 50, honesty: 50 }
 
-      const values = { ...sliderDefaults }
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch09-sandbox-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 860px;
-        display: flex; flex-direction: column; align-items: center; gap: 20px;
-      `
+        // Triangle vertices
+        const cx = w / 2
+        const triH = Math.min(h * 0.6, w * 0.5)
+        const triTop   = { x: cx,                  y: 40 }
+        const triLeft  = { x: cx - triH * 0.9,     y: 40 + triH }
+        const triRight = { x: cx + triH * 0.9,     y: 40 + triH }
 
-      // Instruction
-      const instruction = document.createElement('div')
-      instruction.textContent = i18n.t('ch09.s03_instruction')
-      instruction.style.cssText = `
-        font-family: var(--font-hand); font-size: 19px; color: var(--text);
-        text-align: center;
-      `
+        // Gradient fill — green center, red at edges
+        const gradCx = cx
+        const gradCy = 40 + triH * 0.6
+        const gradient = c.createRadialGradient(gradCx, gradCy, 0, gradCx, gradCy, triH * 0.8)
+        gradient.addColorStop(0, 'rgba(91, 165, 91, 0.2)')
+        gradient.addColorStop(1, 'rgba(217, 83, 79, 0.15)')
 
-      // Sliders panel
-      const slidersPanel = document.createElement('div')
-      slidersPanel.style.cssText = `
-        width: 100%; padding: 20px 24px; border-radius: 12px;
-        border: 2px solid var(--accent); background: rgba(var(--accent-rgb,255,140,0),0.07);
-        display: flex; flex-direction: column; gap: 14px; box-sizing: border-box;
-      `
+        c.fillStyle = gradient
+        c.beginPath()
+        c.moveTo(triTop.x, triTop.y)
+        c.lineTo(triLeft.x, triLeft.y)
+        c.lineTo(triRight.x, triRight.y)
+        c.closePath()
+        c.fill()
 
-      const sliderDefs = [
-        { key: 'helpfulness', labelKey: 'ch09.s03_helpfulness', color: '#818cf8' },
-        { key: 'harmlessness', labelKey: 'ch09.s03_harmlessness', color: '#34d399' },
-        { key: 'honesty', labelKey: 'ch09.s03_honesty', color: '#f472b6' },
-      ]
+        c.strokeStyle = '#ccc'
+        c.lineWidth = 1.5
+        c.stroke()
 
-      const sliderEls = {}
+        // Vertex labels
+        c.font = 'bold 14px Caveat'
+        c.textAlign = 'center'
+        c.fillStyle = '#4A90D9'
+        c.fillText(ctx.i18n.t('ch09.s03_helpfulness'), triTop.x, triTop.y - 8)
+        c.fillStyle = '#5BA55B'
+        c.fillText(ctx.i18n.t('ch09.s03_harmlessness'), triLeft.x, triLeft.y + 20)
+        c.fillStyle = '#E8913A'
+        c.fillText(ctx.i18n.t('ch09.s03_honesty'), triRight.x, triRight.y + 20)
 
-      sliderDefs.forEach(({ key, labelKey, color }) => {
-        const row = document.createElement('div')
-        row.style.cssText = `display: flex; align-items: center; gap: 14px;`
+        // Barycentric dot position based on slider values
+        const h_val = values.helpfulness / 100
+        const s_val = values.harmlessness / 100
+        const o_val = values.honesty / 100
+        const total = h_val + s_val + o_val || 1
 
-        const label = document.createElement('div')
-        label.textContent = i18n.t(labelKey)
-        label.style.cssText = `
-          font-family: var(--font-hand); font-size: 16px; color: ${color};
-          font-weight: bold; width: 120px; flex-shrink: 0;
-        `
+        const dotX = (h_val * triTop.x + s_val * triLeft.x + o_val * triRight.x) / total
+        const dotY = (h_val * triTop.y + s_val * triLeft.y + o_val * triRight.y) / total
 
-        const sliderWrap = document.createElement('div')
-        sliderWrap.style.cssText = `flex: 1; position: relative;`
+        // Balanced check
+        const variance = Math.abs(h_val - s_val) + Math.abs(s_val - o_val) + Math.abs(h_val - o_val)
+        const isBalanced = variance < 0.5
+        const dotColor = isBalanced ? '#5BA55B' : '#D4645C'
 
-        const slider = document.createElement('input')
-        slider.type = 'range'
-        slider.min = 0
-        slider.max = 100
-        slider.value = values[key]
-        slider.style.cssText = `
-          width: 100%; cursor: pointer; accent-color: ${color};
-        `
+        // Dot glow
+        c.fillStyle = dotColor + '30'
+        c.beginPath()
+        c.arc(dotX, dotY, 18, 0, Math.PI * 2)
+        c.fill()
 
-        const valDisplay = document.createElement('div')
-        valDisplay.textContent = values[key]
-        valDisplay.style.cssText = `
-          font-family: var(--font-hand); font-size: 15px; color: ${color};
-          font-weight: bold; width: 36px; text-align: right; flex-shrink: 0;
-        `
+        c.fillStyle = dotColor
+        c.beginPath()
+        c.arc(dotX, dotY, 8, 0, Math.PI * 2)
+        c.fill()
 
-        slider.addEventListener('input', () => {
-          values[key] = parseInt(slider.value)
-          valDisplay.textContent = slider.value
-          updateAll()
-        })
-
-        sliderWrap.appendChild(slider)
-        row.appendChild(label)
-        row.appendChild(sliderWrap)
-        row.appendChild(valDisplay)
-        slidersPanel.appendChild(row)
-
-        sliderEls[key] = slider
-      })
-
-      // Status feedback
-      const statusBox = document.createElement('div')
-      statusBox.style.cssText = `
-        width: 100%; padding: 12px 18px; border-radius: 8px;
-        font-family: var(--font-hand); font-size: 16px; text-align: center;
-        transition: background 0.3s, color 0.3s; box-sizing: border-box;
-      `
-
-      // Scenario cards
-      const scenariosContainer = document.createElement('div')
-      scenariosContainer.style.cssText = `
-        display: flex; flex-direction: column; gap: 12px; width: 100%;
-      `
-
-      const scenarioCards = scenarios.map((scenario) => {
-        const card = document.createElement('div')
-        card.style.cssText = `
-          width: 100%; padding: 16px 20px; border-radius: 10px;
-          border: 2.5px solid var(--text); background: var(--bg);
-          display: flex; flex-direction: column; gap: 8px;
-          box-sizing: border-box; transition: border-color 0.3s;
-        `
-
-        const promptRow = document.createElement('div')
-        promptRow.style.cssText = `
-          display: flex; gap: 8px; align-items: baseline;
-        `
-        const pLabel = document.createElement('span')
-        pLabel.textContent = 'Q:'
-        pLabel.style.cssText = `
-          font-family: var(--font-hand); font-size: 13px; color: var(--accent);
-          font-weight: bold; white-space: nowrap;
-        `
-        const pText = document.createElement('span')
-        pText.textContent = scenario.prompt
-        pText.style.cssText = `
-          font-family: var(--font-hand); font-size: 16px; color: var(--text);
-        `
-        promptRow.appendChild(pLabel)
-        promptRow.appendChild(pText)
-
-        const responseText = document.createElement('div')
-        responseText.style.cssText = `
-          font-family: var(--font-hand); font-size: 15px; line-height: 1.6;
-          color: var(--text); padding-top: 8px;
-          border-top: 1px dashed rgba(128,128,128,0.3);
-        `
-
-        card.appendChild(promptRow)
-        card.appendChild(responseText)
-        scenariosContainer.appendChild(card)
-
-        return { card, responseText }
-      })
-
-      // Advance button
-      const advBtn = document.createElement('button')
-      advBtn.className = 'narrator-btn'
-      advBtn.textContent = i18n.t('ch09.s03_btn')
-      advBtn.onclick = () => bus.emit('scene:advance')
-
-      wrapper.appendChild(instruction)
-      wrapper.appendChild(slidersPanel)
-      wrapper.appendChild(statusBox)
-      wrapper.appendChild(scenariosContainer)
-      wrapper.appendChild(advBtn)
-      document.getElementById('app').appendChild(wrapper)
-
-      const getResponseKey = () => {
-        const { helpfulness, harmlessness } = values
-        if (harmlessness > 70) return 'safe_high'
-        if (helpfulness > 70) return 'helpful_high'
-        return 'balanced'
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
       }
 
-      const updateAll = () => {
-        const responseKey = getResponseKey()
-        const { helpfulness, harmlessness } = values
+      // Panel — title & instruction
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch09.title')
+      sv.panel.appendChild(title)
 
-        // Update scenario cards
-        scenarios.forEach((scenario, idx) => {
-          const { card, responseText } = scenarioCards[idx]
-          responseText.textContent = scenario.responses[responseKey]
+      const instrEl = document.createElement('p')
+      instrEl.textContent = ctx.i18n.t('ch09.s03_instruction')
+      sv.panel.appendChild(instrEl)
 
-          let borderColor
-          if (responseKey === 'balanced') {
-            borderColor = '#22c55e'
-          } else if (responseKey === 'helpful_high') {
-            borderColor = helpfulness > 85 ? '#ef4444' : '#eab308'
+      // Sandbox sliders
+      const controls = createSandboxControls(sv.panel, {
+        controls: [
+          { key: 'helpfulness',  label: ctx.i18n.t('ch09.s03_helpfulness'),  type: 'slider', min: 0, max: 100, value: 50 },
+          { key: 'harmlessness', label: ctx.i18n.t('ch09.s03_harmlessness'), type: 'slider', min: 0, max: 100, value: 50 },
+          { key: 'honesty',      label: ctx.i18n.t('ch09.s03_honesty'),      type: 'slider', min: 0, max: 100, value: 50 },
+        ],
+        onChange: (key, value, all) => {
+          values = all
+          updateScenarios()
+        }
+      })
+
+      // Warning / balanced indicator
+      const warningEl = document.createElement('p')
+      warningEl.style.cssText = 'font-size: 15px; min-height: 30px; margin: 8px 0;'
+      sv.panel.appendChild(warningEl)
+
+      // Scenario cards
+      const scenariosDiv = document.createElement('div')
+      scenariosDiv.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin: 12px 0;'
+
+      const scenarioCards = alignData.scenarios.map(sc => {
+        const card = document.createElement('div')
+        card.style.cssText = 'padding: 8px 12px; border: 1.5px solid var(--text-muted); border-radius: 8px; font-size: 13px;'
+
+        const prompt = document.createElement('div')
+        prompt.style.cssText = 'font-weight: bold; font-size: 12px; color: var(--accent); margin-bottom: 4px;'
+        prompt.textContent = sc.prompt
+
+        const response = document.createElement('div')
+        response.style.cssText = 'color: var(--text); font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap;'
+
+        card.appendChild(prompt)
+        card.appendChild(response)
+        scenariosDiv.appendChild(card)
+        return { card, response, scenario: sc }
+      })
+
+      sv.panel.appendChild(scenariosDiv)
+
+      function updateScenarios() {
+        const h = values.helpfulness
+        const s = values.harmlessness
+
+        scenarioCards.forEach(({ response, scenario }) => {
+          if (h > 70 && s < 40) {
+            response.textContent = scenario.responses.helpful_high
+          } else if (s > 70 && h < 40) {
+            response.textContent = scenario.responses.safe_high
           } else {
-            borderColor = harmlessness > 85 ? '#ef4444' : '#eab308'
+            response.textContent = scenario.responses.balanced
           }
-          card.style.borderColor = borderColor
         })
 
-        // Update status
-        if (responseKey === 'balanced') {
-          statusBox.textContent = i18n.t('ch09.s03_balanced')
-          statusBox.style.background = 'rgba(34,197,94,0.12)'
-          statusBox.style.color = '#22c55e'
-          statusBox.style.border = '1.5px solid #22c55e'
-        } else if (responseKey === 'helpful_high') {
-          statusBox.textContent = i18n.t('ch09.s03_warning_helpful')
-          statusBox.style.background = 'rgba(239,68,68,0.10)'
-          statusBox.style.color = '#ef4444'
-          statusBox.style.border = '1.5px solid #ef4444'
+        // Warning / balanced status
+        if (h > 75) {
+          warningEl.textContent = ctx.i18n.t('ch09.s03_warning_helpful')
+          warningEl.className = 'status-warn'
+        } else if (s > 75) {
+          warningEl.textContent = ctx.i18n.t('ch09.s03_warning_safe')
+          warningEl.className = 'status-warn'
         } else {
-          statusBox.textContent = i18n.t('ch09.s03_warning_safe')
-          statusBox.style.background = 'rgba(234,179,8,0.10)'
-          statusBox.style.color = '#eab308'
-          statusBox.style.border = '1.5px solid #eab308'
+          const variance = Math.abs(h - s) + Math.abs(s - values.honesty) + Math.abs(h - values.honesty)
+          if (variance < 60) {
+            warningEl.textContent = ctx.i18n.t('ch09.s03_balanced')
+            warningEl.className = 'status-ok'
+          } else {
+            warningEl.textContent = ''
+            warningEl.className = ''
+          }
         }
       }
 
-      updateAll()
+      const btn = document.createElement('button')
+      btn.className = 'scene-btn'
+      btn.textContent = ctx.i18n.t('ch09.s03_btn')
+      btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+      sv.panel.appendChild(btn)
 
-      return { wrapper }
+      updateScenarios()
+      draw()
+
+      return { sv, controls, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.controls?.destroy()
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 4: Narrative — tradeoffs
+  // Scene 2: The Full Pipeline [Split-View + Step-Through]
   {
-    id: 'ch09-s04-tradeoffs',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch09.s04_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch09.s04_text2')
-      await ctx.narrator.ask('ch09.s04_text2', [
-        { key: 'ch09.s04_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 5: Narrative — the final BUT
-  {
-    id: 'ch09-s05-but',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch09.s05_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch09.s05_text2')
-      await ctx.narrator.ask('ch09.s05_text2', [
-        { key: 'ch09.s05_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 6: Narrative — finale
-  {
-    id: 'ch09-s06-finale',
+    id: 'ch09-s02-pipeline',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n } = ctx
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let currentStepIdx = 0
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch09-finale-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 720px;
-        display: flex; flex-direction: column; align-items: center; gap: 24px;
-        text-align: center;
-      `
+      const pipelineStages = [
+        { id: 'tokenize',    label: 'Tokenize',    color: '#4A90D9', chapter: 'Ch1' },
+        { id: 'embed',       label: 'Embed',       color: '#4A90D9', chapter: 'Ch1' },
+        { id: 'attention',   label: 'Attention',   color: '#4A90D9', chapter: 'Ch3' },
+        { id: 'transformer', label: 'Transformer', color: '#4A90D9', chapter: 'Ch4' },
+        { id: 'pretrain',    label: 'Pretrain',    color: '#4A90D9', chapter: 'Ch5' },
+        { id: 'sft',         label: 'SFT',         color: '#5BA55B', chapter: 'Ch6-7' },
+        { id: 'rlhf',        label: 'RLHF',        color: '#E8913A', chapter: 'Ch8-9' },
+      ]
 
-      const text1 = document.createElement('div')
-      text1.textContent = i18n.t('ch09.s06_text')
-      text1.style.cssText = `
-        font-family: var(--font-hand); font-size: 20px; color: var(--text); line-height: 1.6;
-      `
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      const pipeline = document.createElement('div')
-      pipeline.textContent = i18n.t('ch09.s06_pipeline')
-      pipeline.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--accent);
-        font-weight: bold; line-height: 1.7; letter-spacing: 0.02em;
-        padding: 18px 24px; border-radius: 12px;
-        border: 2px solid var(--accent);
-        background: rgba(var(--accent-rgb,255,140,0),0.10);
-        width: 100%; box-sizing: border-box;
-      `
+        const blockH = 40
+        const blockW = w * 0.55
+        const startX = (w - blockW) / 2
+        const startY = 20
+        const gap = 10
 
-      const text2 = document.createElement('div')
-      text2.textContent = i18n.t('ch09.s06_text2')
-      text2.style.cssText = `
-        font-family: var(--font-hand); font-size: 19px; color: var(--text); line-height: 1.6;
-      `
+        pipelineStages.forEach((stage, i) => {
+          const y = startY + i * (blockH + gap)
+          const isActive = i === currentStepIdx
+          const isPast   = i < currentStepIdx
 
-      const text3 = document.createElement('div')
-      text3.textContent = i18n.t('ch09.s06_text3')
-      text3.style.cssText = `
-        font-family: var(--font-hand); font-size: 21px; color: var(--accent);
-        font-weight: bold; line-height: 1.5;
-      `
+          c.fillStyle = isPast || isActive
+            ? stage.color + (isActive ? '' : '40')
+            : 'rgba(45,45,45,0.06)'
+          c.fillRect(startX, y, blockW, blockH)
 
-      const finaleBtn = document.createElement('button')
-      finaleBtn.className = 'narrator-btn'
-      finaleBtn.textContent = i18n.t('ch09.s06_btn')
-      finaleBtn.style.cssText = `font-size: 20px; padding: 14px 32px;`
-      finaleBtn.onclick = () => bus.emit('chapter:complete', 'ch09-alignment')
+          c.strokeStyle = isPast || isActive ? stage.color : '#ccc'
+          c.lineWidth = isActive ? 2.5 : 1
+          c.strokeRect(startX, y, blockW, blockH)
 
-      wrapper.appendChild(text1)
-      wrapper.appendChild(pipeline)
-      wrapper.appendChild(text2)
-      wrapper.appendChild(text3)
-      wrapper.appendChild(finaleBtn)
-      document.getElementById('app').appendChild(wrapper)
+          c.font = isActive ? 'bold 14px JetBrains Mono' : '13px JetBrains Mono'
+          c.fillStyle = isActive ? '#fff' : (isPast ? stage.color : '#888')
+          c.textAlign = 'center'
+          c.fillText(`${stage.chapter}: ${stage.label}`, w / 2, y + blockH / 2 + 4)
 
-      return { wrapper }
+          // Arrow connector
+          if (i < pipelineStages.length - 1) {
+            c.strokeStyle = isPast || isActive ? '#4A90D9' : '#ddd'
+            c.lineWidth = 1.5
+            c.beginPath()
+            c.moveTo(w / 2, y + blockH)
+            c.lineTo(w / 2, y + blockH + gap)
+            c.stroke()
+          }
+        })
+
+        // Flowing ball at current stage
+        if (currentStepIdx < pipelineStages.length) {
+          const ballY = startY + currentStepIdx * (blockH + gap) + blockH / 2
+          c.fillStyle = pipelineStages[currentStepIdx].color
+          c.beginPath()
+          c.arc(startX - 20, ballY, 10, 0, Math.PI * 2)
+          c.fill()
+        }
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      const steps = pipelineStages.map((stage, i) => ({
+        id: stage.id,
+        label: `${stage.chapter}: ${stage.label}`,
+        description: i === pipelineStages.length - 1
+          ? ctx.i18n.t('ch09.s06_text2')
+          : `Stage ${i + 1}: ${stage.label}`,
+        color: stage.color
+      }))
+
+      const stepper = createStepThrough(sv.panel, {
+        steps,
+        onStep: (idx, data) => {
+          currentStepIdx = idx
+          if (data.done) ctx.bus.emit('scene:advance')
+        },
+        i18n: ctx.i18n
+      })
+
+      draw()
+
+      return { sv, stepper, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.stepper?.destroy()
+      rv?.sv?.destroy()
     }
   },
+
+  // Scene 3: Wrap-up / Congratulations [Narrative]
+  {
+    id: 'ch09-s03-congrats',
+    type: 'narrative',
+    async enter(ctx) {
+      await ctx.narrator.say('ch09.s06_text')
+      await sleep(500)
+      await ctx.narrator.say('ch09.s06_pipeline')
+      await sleep(1000)
+      await ctx.narrator.say('ch09.s06_text2')
+      await sleep(500)
+      await ctx.narrator.say('ch09.s06_text3')
+      await ctx.narrator.ask('ch09.s06_text3', [
+        { key: 'ch09.s06_btn', action: () => ctx.bus.emit('chapter:complete', 'ch09-alignment') }
+      ])
+    },
+    exit(_, ctx) {
+      ctx?.narrator?.clear()
+    }
+  }
 ]
