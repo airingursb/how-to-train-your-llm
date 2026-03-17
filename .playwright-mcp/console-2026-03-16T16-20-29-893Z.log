@@ -1,2 +1,0 @@
-[ 1361315ms] [ERROR] WebSocket connection to 'ws://localhost:3456/?token=cY85P0m9L79h' failed:  @ http://localhost:3456/@vite/client:840
-[ 1367124ms] [ERROR] WebSocket connection to 'ws://localhost:3456/?token=u05mGkt5rVXm' failed:  @ http://localhost:3456/@vite/client:840
