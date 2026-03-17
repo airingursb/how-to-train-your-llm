@@ -1,507 +1,513 @@
+import { createSplitView } from '../../helpers/split-view.js'
+import { createStepThrough } from '../../helpers/step-through.js'
 import attentionData from './data/attention-data.json'
 
-function injectAttentionStyle() {
-  if (document.getElementById('ch03-attention-style')) return
-  const style = document.createElement('style')
-  style.id = 'ch03-attention-style'
-  style.textContent = `
-    @keyframes ch03-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(74,144,217,0.7); }
-      70%  { box-shadow: 0 0 0 10px rgba(74,144,217,0); }
-      100% { box-shadow: 0 0 0 0 rgba(74,144,217,0); }
-    }
-    .ch03-query-token {
-      animation: ch03-pulse 1.4s infinite;
-    }
-    .ch03-token-box {
-      transition: background 0.15s, border-color 0.15s, transform 0.1s;
-    }
-    .ch03-token-box:not(.ch03-query-token):not(.ch03-disabled):hover {
-      transform: scale(1.07);
-    }
-    .ch03-tab-btn {
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-  `
-  document.head.appendChild(style)
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 export default [
-  // ─── Scene 1: Narrative hook ──────────────────────────────────────────────
+  // Scene 1: Draw Attention
   {
-    id: 'ch03-s01-hook',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch03.s01_text')
-      await ctx.narrator.say('ch03.s01_text2')
-      await ctx.narrator.ask('ch03.s01_text2', [
-        { key: 'ch03.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ─── Scene 2: Q/K/V intuition ─────────────────────────────────────────────
-  {
-    id: 'ch03-s02-qkv',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch03.s02_text')
-      await ctx.narrator.say('ch03.s02_text2')
-      await ctx.narrator.ask('ch03.s02_text2', [
-        { key: 'ch03.s02_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ─── Scene 3: Play as an attention head ───────────────────────────────────
-  {
-    id: 'ch03-s03-attention-head',
+    id: 'ch03-s01-draw',
     type: 'interactive',
     async enter(ctx) {
-      injectAttentionStyle()
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
 
       const sentences = attentionData.sentences
-      let roundIndex = 0
-      let phase = 'select' // 'select' | 'result'
-      let playerSelected = []
+      let sentIdx = 0
+      let userConnections = [] // [{from, to}]
+      let revealed = false
 
-      const wrapper = document.createElement('div')
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; text-align: center; width: 92%; max-width: 780px;
-      `
+      function getTokenPositions(tokens, w, h) {
+        const tokenW = Math.min(70, (w - 40) / tokens.length)
+        const startX = (w - tokenW * tokens.length) / 2
+        const y = h * 0.4
+        return tokens.map((t, i) => ({
+          x: startX + i * tokenW + tokenW / 2,
+          y,
+          w: tokenW - 4,
+          h: 36,
+          label: t,
+          index: i
+        }))
+      }
 
-      // Round counter
+      function drawArc(ctx2d, from, to, color, lineWidth) {
+        const midX = (from.x + to.x) / 2
+        const midY = Math.min(from.y, to.y) - 40 - Math.abs(from.x - to.x) * 0.15
+        ctx2d.strokeStyle = color
+        ctx2d.lineWidth = lineWidth
+        ctx2d.beginPath()
+        ctx2d.moveTo(from.x, from.y - from.h / 2)
+        ctx2d.quadraticCurveTo(midX, midY, to.x, to.y - to.h / 2)
+        ctx2d.stroke()
+      }
+
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
+
+        const sent = sentences[sentIdx]
+        const positions = getTokenPositions(sent.tokens, w, h)
+        const queryIdx = sent.queryToken
+
+        // Draw user connections (blue arcs)
+        userConnections.forEach(({ from, to }) => {
+          drawArc(c, positions[from], positions[to], 'rgba(74, 144, 217, 0.5)', 2)
+        })
+
+        // Draw model connections (revealed, green arcs with varying intensity)
+        if (revealed) {
+          sent.correctAttention.forEach((weight, i) => {
+            if (weight > 0) {
+              drawArc(c, positions[queryIdx], positions[i], `rgba(91, 165, 91, ${weight * 0.7})`, 3)
+            }
+          })
+        }
+
+        // Draw token cards
+        positions.forEach((pos, i) => {
+          const isQuery = i === queryIdx
+
+          c.fillStyle = isQuery ? 'rgba(74, 144, 217, 0.2)' : 'rgba(45,45,45,0.05)'
+          c.fillRect(pos.x - pos.w / 2, pos.y - pos.h / 2, pos.w, pos.h)
+
+          c.strokeStyle = isQuery ? '#4A90D9' : '#ccc'
+          c.lineWidth = isQuery ? 2.5 : 1
+          c.strokeRect(pos.x - pos.w / 2, pos.y - pos.h / 2, pos.w, pos.h)
+
+          c.font = '14px JetBrains Mono, monospace'
+          c.fillStyle = '#2D2D2D'
+          c.textAlign = 'center'
+          c.textBaseline = 'middle'
+          c.fillText(pos.label, pos.x, pos.y)
+        })
+
+        // Instructions on canvas
+        c.font = '13px Caveat, cursive'
+        c.fillStyle = '#888'
+        c.textAlign = 'center'
+        c.fillText(`Click tokens to draw attention from "${sent.queryWord}"`, w / 2, h * 0.15)
+
+        if (revealed) {
+          c.fillStyle = '#4A90D9'
+          c.fillText('Blue = your guesses', w * 0.3, h * 0.85)
+          c.fillStyle = '#5BA55B'
+          c.fillText('Green = model attention', w * 0.7, h * 0.85)
+        }
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // Click handler
+      canvas.addEventListener('click', (e) => {
+        if (revealed) return
+        const rect = canvas.getBoundingClientRect()
+        const mx = e.clientX - rect.left
+        const my = e.clientY - rect.top
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        const sent = sentences[sentIdx]
+        const positions = getTokenPositions(sent.tokens, w, h)
+
+        const clicked = positions.find(p =>
+          mx >= p.x - p.w / 2 && mx <= p.x + p.w / 2 &&
+          my >= p.y - p.h / 2 && my <= p.y + p.h / 2
+        )
+
+        if (!clicked) return
+
+        // Always draw from the query token
+        if (clicked.index !== sent.queryToken) {
+          userConnections.push({ from: sent.queryToken, to: clicked.index })
+        }
+      })
+
+      // Panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch03.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch03.s01_text')
+      sv.panel.appendChild(desc)
+
       const roundLabel = document.createElement('div')
-      roundLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 16px; color: var(--accent);
-        margin-bottom: 16px; opacity: 0.85;
-      `
+      roundLabel.className = 'score-badge'
+      sv.panel.appendChild(roundLabel)
 
-      // Instruction text
-      const instruction = document.createElement('div')
-      instruction.style.cssText = `
-        font-family: var(--font-hand); font-size: 20px; color: var(--text);
-        margin-bottom: 24px; line-height: 1.5;
-      `
+      const instrEl = document.createElement('p')
+      sv.panel.appendChild(instrEl)
 
-      // Token row container
-      const tokenRow = document.createElement('div')
-      tokenRow.style.cssText = `
-        display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-        margin-bottom: 28px; padding: 20px;
-        background: rgba(45,45,45,0.04); border-radius: 16px;
-      `
+      const feedbackEl = document.createElement('p')
+      feedbackEl.style.cssText = 'font-size: 16px; color: var(--text-muted); min-height: 40px;'
+      sv.panel.appendChild(feedbackEl)
 
-      // Explanation area
-      const explanationBox = document.createElement('div')
-      explanationBox.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--text);
-        background: rgba(74,144,217,0.08); border-radius: 12px;
-        padding: 16px 20px; margin-bottom: 20px;
-        line-height: 1.6; min-height: 0; display: none;
-      `
-
-      // Score message
-      const scoreMsg = document.createElement('div')
-      scoreMsg.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--accent);
-        margin-bottom: 16px; min-height: 0; display: none;
-      `
-
-      // Action button (Check / Next)
-      const actionBtn = document.createElement('button')
-      actionBtn.className = 'narrator-btn'
-
-      wrapper.appendChild(roundLabel)
-      wrapper.appendChild(instruction)
-      wrapper.appendChild(tokenRow)
-      wrapper.appendChild(explanationBox)
-      wrapper.appendChild(scoreMsg)
-      wrapper.appendChild(actionBtn)
-
-      document.getElementById('app').appendChild(wrapper)
+      const checkBtn = document.createElement('button')
+      checkBtn.className = 'scene-btn'
+      sv.panel.appendChild(checkBtn)
 
       function renderRound() {
-        const sentence = sentences[roundIndex]
-        phase = 'select'
-        playerSelected = new Array(sentence.tokens.length).fill(0)
+        revealed = false
+        userConnections = []
+        const sent = sentences[sentIdx]
+        roundLabel.textContent = ctx.i18n.t('ch03.s03_round', { current: sentIdx + 1, total: sentences.length })
+        instrEl.textContent = ctx.i18n.t('ch03.s03_instruction', { word: sent.queryWord })
+        feedbackEl.textContent = ''
+        checkBtn.textContent = ctx.i18n.t('ch03.s03_check')
+        checkBtn.style.display = ''
+        checkBtn.onclick = () => {
+          revealed = true
+          feedbackEl.textContent = sent.explanation
+          feedbackEl.className = 'fade-in'
 
-        // Round label
-        const roundTpl = ctx.i18n.t('ch03.s03_round')
-        roundLabel.textContent = roundTpl
-          .replace('{{current}}', roundIndex + 1)
-          .replace('{{total}}', sentences.length)
-
-        // Instruction
-        const instrTpl = ctx.i18n.t('ch03.s03_instruction')
-        instruction.textContent = instrTpl.replace('{{word}}', sentence.queryWord)
-
-        // Hide feedback
-        explanationBox.style.display = 'none'
-        scoreMsg.style.display = 'none'
-
-        // Button
-        actionBtn.textContent = ctx.i18n.t('ch03.s03_check')
-
-        // Build token boxes
-        tokenRow.innerHTML = ''
-        sentence.tokens.forEach((token, i) => {
-          const isQuery = i === sentence.queryToken
-
-          const box = document.createElement('div')
-          box.className = 'ch03-token-box' + (isQuery ? ' ch03-query-token' : '')
-          box.style.cssText = `
-            min-width: 60px; padding: 8px 12px;
-            font-family: var(--font-mono); font-size: 16px;
-            border-radius: 8px; text-align: center;
-            user-select: none;
-            color: var(--text);
-            ${isQuery
-              ? 'border: 3px solid #4A90D9; background: rgba(74,144,217,0.15); cursor: default;'
-              : 'border: 2px solid var(--text); background: transparent; cursor: pointer;'
+          if (sentIdx < sentences.length - 1) {
+            checkBtn.textContent = ctx.i18n.t('ch03.s03_next')
+            checkBtn.onclick = () => {
+              sentIdx++
+              renderRound()
             }
-          `
-          box.textContent = token
-
-          if (!isQuery) {
-            box.addEventListener('click', () => {
-              if (phase !== 'select') return
-              playerSelected[i] = playerSelected[i] ? 0 : 1
-              if (playerSelected[i]) {
-                box.style.background = 'rgba(74,144,217,0.3)'
-                box.style.borderColor = '#4A90D9'
-                box.style.border = '2px solid #4A90D9'
-              } else {
-                box.style.background = 'transparent'
-                box.style.borderColor = 'var(--text)'
-                box.style.border = '2px solid var(--text)'
-              }
-            })
-          }
-
-          tokenRow.appendChild(box)
-        })
-      }
-
-      function showResult() {
-        phase = 'result'
-        const sentence = sentences[roundIndex]
-        const correct = sentence.correctAttention
-        const boxes = tokenRow.querySelectorAll('.ch03-token-box')
-
-        let matches = 0
-        let totalCorrect = correct.filter(v => v === 1).length
-
-        boxes.forEach((box, i) => {
-          if (i === sentence.queryToken) return // skip query token itself
-
-          const wasSelected = playerSelected[i] === 1
-          const shouldSelect = correct[i] === 1
-
-          box.style.cursor = 'default'
-          box.classList.add('ch03-disabled')
-
-          if (wasSelected && shouldSelect) {
-            // Correct match
-            box.style.background = 'rgba(91,165,91,0.3)'
-            box.style.border = '2px solid green'
-            matches++
-          } else if (!wasSelected && shouldSelect) {
-            // Missed
-            box.style.background = 'rgba(200,140,60,0.3)'
-            box.style.border = '2px solid orange'
-          } else if (wasSelected && !shouldSelect) {
-            // Wrong guess
-            box.style.background = 'rgba(200,60,60,0.2)'
-            box.style.border = '2px solid red'
-          }
-        })
-
-        // Score message
-        scoreMsg.style.display = 'block'
-        scoreMsg.textContent = matches === totalCorrect
-          ? ctx.i18n.t('ch03.s03_score_perfect')
-          : ctx.i18n.t('ch03.s03_score_partial')
-
-        // Explanation
-        explanationBox.style.display = 'block'
-        explanationBox.textContent = sentence.explanation
-
-        // Next button
-        const isLast = roundIndex === sentences.length - 1
-        actionBtn.textContent = ctx.i18n.t(isLast ? 'ch03.s04_btn' : 'ch03.s03_next')
-      }
-
-      actionBtn.addEventListener('click', () => {
-        if (phase === 'select') {
-          showResult()
-        } else {
-          // advance round or scene
-          if (roundIndex < sentences.length - 1) {
-            roundIndex++
-            renderRound()
           } else {
-            ctx.bus.emit('scene:advance')
+            checkBtn.textContent = ctx.i18n.t('ch03.s04_btn')
+            checkBtn.onclick = () => ctx.bus.emit('scene:advance')
           }
         }
-      })
+      }
 
       renderRound()
-      return { wrapper }
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // ─── Scene 4: The BUT reversal ────────────────────────────────────────────
+  // Scene 2: Q/K/V Step-Through
   {
-    id: 'ch03-s04-but',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch03.s04_text')
-      await ctx.narrator.say('ch03.s04_text2')
-      await ctx.narrator.ask('ch03.s04_text2', [
-        { key: 'ch03.s04_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ─── Scene 5: Multi-head attention visualization ──────────────────────────
-  {
-    id: 'ch03-s05-multihead',
+    id: 'ch03-s02-qkv',
     type: 'interactive',
     async enter(ctx) {
-      injectAttentionStyle()
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let currentStepIdx = 0
 
-      const { sentence, heads } = attentionData.multiHeadDemo
-      let activeHead = 0
+      const tokens = ['The', 'cat', 'sat']
 
-      const wrapper = document.createElement('div')
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; text-align: center; width: 92%; max-width: 800px;
-      `
-
-      // Instruction
-      const instruction = document.createElement('div')
-      instruction.style.cssText = `
-        font-family: var(--font-hand); font-size: 20px; color: var(--text);
-        margin-bottom: 24px; line-height: 1.5;
-      `
-      instruction.textContent = ctx.i18n.t('ch03.s05_instruction')
-      wrapper.appendChild(instruction)
-
-      // Token row (reference, non-interactive)
-      const tokenRowContainer = document.createElement('div')
-      tokenRowContainer.style.cssText = `
-        position: relative; margin-bottom: 0;
-      `
-
-      // SVG overlay for arcs (above tokens)
-      const svgHeight = 80
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      svg.style.cssText = `
-        position: absolute; bottom: 0; left: 0; width: 100%; height: ${svgHeight}px;
-        pointer-events: none; overflow: visible;
-      `
-      tokenRowContainer.appendChild(svg)
-
-      const tokenRow = document.createElement('div')
-      tokenRow.style.cssText = `
-        display: flex; flex-wrap: nowrap; gap: 8px; justify-content: center;
-        padding: 14px 20px; position: relative; z-index: 1;
-        background: rgba(45,45,45,0.04); border-radius: 16px;
-        margin-top: ${svgHeight}px;
-      `
-
-      const tokenBoxes = []
-      sentence.forEach((token, i) => {
-        const box = document.createElement('div')
-        box.className = 'ch03-token-box'
-        box.style.cssText = `
-          min-width: 60px; padding: 8px 12px;
-          font-family: var(--font-mono); font-size: 15px;
-          border-radius: 8px; text-align: center;
-          border: 2px solid var(--text); background: transparent;
-          color: var(--text); cursor: default; white-space: nowrap;
-        `
-        box.textContent = token
-        tokenRow.appendChild(box)
-        tokenBoxes.push(box)
-      })
-
-      tokenRowContainer.appendChild(tokenRow)
-      wrapper.appendChild(tokenRowContainer)
-
-      // Head description
-      const headDesc = document.createElement('div')
-      headDesc.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--text);
-        opacity: 0.8; margin: 16px 0; min-height: 28px; line-height: 1.5;
-      `
-      wrapper.appendChild(headDesc)
-
-      // Tab buttons for heads
-      const tabRow = document.createElement('div')
-      tabRow.style.cssText = `
-        display: flex; gap: 10px; justify-content: center; margin: 16px 0 24px;
-        flex-wrap: wrap;
-      `
-
-      const tabBtns = heads.map((head, hi) => {
-        const btn = document.createElement('button')
-        btn.className = 'ch03-tab-btn'
-
-        const nameTpl = ctx.i18n.t('ch03.s05_head_name')
-        btn.textContent = nameTpl
-          .replace('{{n}}', hi + 1)
-          .replace('{{name}}', head.name)
-
-        btn.style.cssText = `
-          font-family: var(--font-hand); font-size: 16px;
-          padding: 8px 20px; border-radius: 20px; cursor: pointer;
-          border: 2px solid ${hi === 0 ? '#4A90D9' : 'var(--text)'};
-          background: ${hi === 0 ? 'rgba(74,144,217,0.15)' : 'transparent'};
-          color: var(--text);
-        `
-        btn.addEventListener('click', () => selectHead(hi))
-        tabRow.appendChild(btn)
-        return btn
-      })
-
-      wrapper.appendChild(tabRow)
-
-      // Advance button
-      const advBtn = document.createElement('button')
-      advBtn.className = 'narrator-btn'
-      advBtn.textContent = ctx.i18n.t('ch03.s05_btn')
-      advBtn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
-      wrapper.appendChild(advBtn)
-
-      document.getElementById('app').appendChild(wrapper)
-
-      function getTokenCenter(index) {
-        const box = tokenBoxes[index]
-        const rowRect = tokenRow.getBoundingClientRect()
-        const boxRect = box.getBoundingClientRect()
-        return {
-          x: boxRect.left - rowRect.left + boxRect.width / 2,
-          y: 0 // baseline at top of tokenRow
-        }
+      function drawArrowHead(ctx2d, x, y, color) {
+        ctx2d.fillStyle = color
+        ctx2d.beginPath()
+        ctx2d.moveTo(x, y + 6)
+        ctx2d.lineTo(x - 4, y - 2)
+        ctx2d.lineTo(x + 4, y - 2)
+        ctx2d.closePath()
+        ctx2d.fill()
       }
 
-      function drawArcs(headIndex) {
-        svg.innerHTML = ''
-        const head = heads[headIndex]
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-        // Reset token highlight
-        tokenBoxes.forEach(b => {
-          b.style.background = 'transparent'
-          b.style.borderColor = 'var(--text)'
+        const tokenW = 80
+        const startX = (w - tokenW * tokens.length) / 2
+        const baseY = h * 0.2
+
+        // Draw tokens
+        c.font = '16px JetBrains Mono, monospace'
+        tokens.forEach((tok, i) => {
+          const x = startX + i * tokenW + tokenW / 2
+          c.fillStyle = 'rgba(45,45,45,0.08)'
+          c.fillRect(x - 30, baseY, 60, 32)
+          c.strokeStyle = '#ccc'
+          c.strokeRect(x - 30, baseY, 60, 32)
+          c.fillStyle = '#2D2D2D'
+          c.textAlign = 'center'
+          c.fillText(tok, x, baseY + 22)
         })
 
-        if (head.pattern === 'diagonal') {
-          // Draw arcs between adjacent tokens
-          for (let i = 0; i < sentence.length - 1; i++) {
-            drawArc(i, i + 1, '#4A90D9', 0.5)
+        // Step 0: Query arrows (blue, pointing down)
+        if (currentStepIdx >= 0) {
+          tokens.forEach((_, i) => {
+            const x = startX + i * tokenW + tokenW / 2
+            c.strokeStyle = '#4A90D9'
+            c.lineWidth = 2
+            c.beginPath()
+            c.moveTo(x, baseY + 36)
+            c.lineTo(x, baseY + 70)
+            c.stroke()
+            drawArrowHead(c, x, baseY + 70, '#4A90D9')
+            c.font = '11px JetBrains Mono, monospace'
+            c.fillStyle = '#4A90D9'
+            c.fillText('Q', x + 10, baseY + 55)
+          })
+        }
+
+        // Step 1: Key arrows (green)
+        if (currentStepIdx >= 1) {
+          tokens.forEach((_, i) => {
+            const x = startX + i * tokenW + tokenW / 2 - 15
+            c.strokeStyle = '#5BA55B'
+            c.lineWidth = 2
+            c.beginPath()
+            c.moveTo(x, baseY + 36)
+            c.lineTo(x, baseY + 70)
+            c.stroke()
+            drawArrowHead(c, x, baseY + 70, '#5BA55B')
+            c.font = '11px JetBrains Mono, monospace'
+            c.fillStyle = '#5BA55B'
+            c.fillText('K', x - 10, baseY + 55)
+          })
+        }
+
+        // Step 2: Dot products (numbers between pairs)
+        if (currentStepIdx >= 2) {
+          const dotProducts = [[0.8, 0.3, 0.1], [0.2, 0.7, 0.4], [0.1, 0.3, 0.9]]
+          const dpY = baseY + 90
+          c.font = '12px JetBrains Mono, monospace'
+          tokens.forEach((_, qi) => {
+            tokens.forEach((_, ki) => {
+              const qx = startX + qi * tokenW + tokenW / 2
+              const kx = startX + ki * tokenW + tokenW / 2
+              const mx = (qx + kx) / 2
+              const my = dpY + qi * 25
+              c.fillStyle = '#E8913A'
+              c.fillText(dotProducts[qi][ki].toFixed(1), mx, my)
+            })
+          })
+        }
+
+        // Step 3: Softmax bars
+        if (currentStepIdx >= 3) {
+          const softmax = [[0.55, 0.30, 0.15], [0.15, 0.50, 0.35], [0.10, 0.25, 0.65]]
+          const barY = baseY + 170
+          c.font = '11px JetBrains Mono, monospace'
+          tokens.forEach((_, qi) => {
+            const y = barY + qi * 28
+            c.fillStyle = '#888'
+            c.textAlign = 'right'
+            c.fillText(tokens[qi] + ':', startX - 5, y + 12)
+            c.textAlign = 'left'
+            tokens.forEach((_, ki) => {
+              const x = startX + ki * tokenW
+              const bw = softmax[qi][ki] * (tokenW - 8)
+              c.fillStyle = `rgba(74, 144, 217, ${0.2 + softmax[qi][ki] * 0.7})`
+              c.fillRect(x, y, bw, 18)
+              c.fillStyle = '#666'
+              c.fillText((softmax[qi][ki] * 100).toFixed(0) + '%', x + bw + 4, y + 13)
+            })
+          })
+        }
+
+        // Step 4: Output vectors
+        if (currentStepIdx >= 4) {
+          const outY = baseY + 280
+          c.font = '13px JetBrains Mono, monospace'
+          c.fillStyle = '#888'
+          c.textAlign = 'center'
+          c.fillText('Output Vectors:', w / 2, outY)
+          tokens.forEach((tok, i) => {
+            const x = startX + i * tokenW + tokenW / 2
+            c.fillStyle = '#4A90D9'
+            c.fillRect(x - 25, outY + 10, 50, 24)
+            c.fillStyle = '#fff'
+            c.fillText('v_' + tok, x, outY + 26)
+          })
+        }
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      const steps = [
+        { id: 'q', label: '1. Query Vectors', description: 'Each token creates a Query vector — "What am I looking for?"', color: '#4A90D9' },
+        { id: 'k', label: '2. Key Vectors', description: 'Each token also creates a Key vector — "What do I contain?"', color: '#5BA55B' },
+        { id: 'dot', label: '3. Dot Products', description: 'Query · Key = similarity score. Higher score = more relevant.', color: '#E8913A' },
+        { id: 'soft', label: '4. Softmax', description: 'Scores are normalized to probabilities. They must sum to 100%.', color: '#4A90D9' },
+        { id: 'out', label: '5. Weighted Sum', description: "Each token's output is a weighted sum of all Value vectors, using the attention weights.", color: '#5BA55B' },
+      ]
+
+      const stepper = createStepThrough(sv.panel, {
+        steps,
+        onStep: (idx, stepData) => {
+          currentStepIdx = idx
+          if (stepData.done) {
+            ctx.bus.emit('scene:advance')
           }
-          tokenBoxes.forEach(b => {
-            b.style.background = 'rgba(74,144,217,0.1)'
-            b.style.borderColor = '#4A90D9'
-          })
-        } else if (head.links) {
-          head.links.forEach(([from, to]) => {
-            drawArc(from, to, '#50B478', 0.65)
-            tokenBoxes[from].style.background = 'rgba(80,180,120,0.15)'
-            tokenBoxes[from].style.borderColor = '#50B478'
-            tokenBoxes[to].style.background = 'rgba(80,180,120,0.15)'
-            tokenBoxes[to].style.borderColor = '#50B478'
-          })
-        }
-      }
+        },
+        i18n: ctx.i18n
+      })
 
-      function drawArc(fromIdx, toIdx, color, opacity) {
-        // Wait one frame so layout is settled
-        requestAnimationFrame(() => {
-          const rowRect = tokenRow.getBoundingClientRect()
-          const containerRect = tokenRowContainer.getBoundingClientRect()
+      draw()
 
-          const fromBox = tokenBoxes[fromIdx].getBoundingClientRect()
-          const toBox = tokenBoxes[toIdx].getBoundingClientRect()
-
-          const x1 = fromBox.left - containerRect.left + fromBox.width / 2
-          const x2 = toBox.left - containerRect.left + toBox.width / 2
-          const y = rowRect.top - containerRect.top // top of token row relative to container
-
-          const mx = (x1 + x2) / 2
-          const spread = Math.abs(x2 - x1)
-          const arcHeight = Math.min(svgHeight - 10, spread * 0.45 + 20)
-          const cy = y - arcHeight
-
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-          path.setAttribute('d', `M ${x1} ${y} Q ${mx} ${cy} ${x2} ${y}`)
-          path.setAttribute('stroke', color)
-          path.setAttribute('stroke-width', '2.5')
-          path.setAttribute('fill', 'none')
-          path.setAttribute('opacity', String(opacity))
-          path.setAttribute('stroke-linecap', 'round')
-          svg.appendChild(path)
-
-          // Arrow head at destination
-          const angle = Math.atan2(y - cy, x2 - mx)
-          const aw = 7
-          const ah = 5
-          const arr = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
-          const ax = x2, ay = y
-          arr.setAttribute('points', `
-            ${ax},${ay}
-            ${ax - aw * Math.cos(angle - 0.4)},${ay - aw * Math.sin(angle - 0.4)}
-            ${ax - aw * Math.cos(angle + 0.4)},${ay - aw * Math.sin(angle + 0.4)}
-          `)
-          arr.setAttribute('fill', color)
-          arr.setAttribute('opacity', String(opacity))
-          svg.appendChild(arr)
-        })
-      }
-
-      function selectHead(hi) {
-        activeHead = hi
-        tabBtns.forEach((btn, i) => {
-          btn.style.borderColor = i === hi ? '#4A90D9' : 'var(--text)'
-          btn.style.background = i === hi ? 'rgba(74,144,217,0.15)' : 'transparent'
-        })
-        headDesc.textContent = heads[hi].description
-        svg.innerHTML = ''
-        drawArcs(hi)
-      }
-
-      // Initial render
-      selectHead(0)
-
-      return { wrapper }
+      return { sv, stepper, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.stepper?.destroy()
+      rv?.sv?.destroy()
     }
   },
 
-  // ─── Scene 6: Wrap-up ─────────────────────────────────────────────────────
+  // Scene 3: Multi-Head Explorer
   {
-    id: 'ch03-s06-wrapup',
+    id: 'ch03-s03-multihead',
+    type: 'interactive',
+    async enter(ctx) {
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let activeHead = 0
+
+      const { sentence, heads } = attentionData.multiHeadDemo
+      const headColors = ['#4A90D9', '#5BA55B', '#E8913A']
+
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
+
+        const tokenW = Math.min(65, (w - 40) / sentence.length)
+        const startX = (w - tokenW * sentence.length) / 2
+        const tokenY = h * 0.5
+
+        // Draw tokens
+        c.font = '13px JetBrains Mono, monospace'
+        sentence.forEach((tok, i) => {
+          const x = startX + i * tokenW + tokenW / 2
+          c.fillStyle = 'rgba(45,45,45,0.06)'
+          c.fillRect(x - tokenW / 2 + 2, tokenY - 16, tokenW - 4, 32)
+          c.strokeStyle = '#ccc'
+          c.strokeRect(x - tokenW / 2 + 2, tokenY - 16, tokenW - 4, 32)
+          c.fillStyle = '#2D2D2D'
+          c.textAlign = 'center'
+          c.fillText(tok, x, tokenY + 4)
+        })
+
+        // Draw attention beams for active head
+        const head = heads[activeHead]
+        const color = headColors[activeHead]
+
+        if (head.pattern === 'diagonal') {
+          // Positional: each token attends to neighbors
+          for (let i = 0; i < sentence.length; i++) {
+            for (let j = Math.max(0, i - 2); j <= Math.min(sentence.length - 1, i + 2); j++) {
+              if (i === j) continue
+              const fromX = startX + i * tokenW + tokenW / 2
+              const toX = startX + j * tokenW + tokenW / 2
+              const intensity = 1 - Math.abs(i - j) * 0.3
+              const midY = tokenY - 30 - Math.abs(i - j) * 12
+              // Build rgba from hex color
+              c.strokeStyle = color + Math.round(intensity * 0.5 * 255).toString(16).padStart(2, '0')
+              c.lineWidth = intensity * 3
+              c.beginPath()
+              c.moveTo(fromX, tokenY - 16)
+              c.quadraticCurveTo((fromX + toX) / 2, midY, toX, tokenY - 16)
+              c.stroke()
+            }
+          }
+        } else if (head.links) {
+          head.links.forEach(([from, to]) => {
+            const fromX = startX + from * tokenW + tokenW / 2
+            const toX = startX + to * tokenW + tokenW / 2
+            const midY = tokenY - 40 - Math.abs(from - to) * 15
+            c.strokeStyle = color
+            c.lineWidth = 3
+            c.beginPath()
+            c.moveTo(fromX, tokenY - 16)
+            c.quadraticCurveTo((fromX + toX) / 2, midY, toX, tokenY - 16)
+            c.stroke()
+            // Dot at target
+            c.fillStyle = color
+            c.beginPath()
+            c.arc(toX, tokenY - 16, 4, 0, Math.PI * 2)
+            c.fill()
+          })
+        }
+
+        // Head label
+        c.font = 'bold 16px Caveat, cursive'
+        c.fillStyle = color
+        c.textAlign = 'center'
+        c.fillText(`Head ${activeHead + 1}: ${head.name}`, w / 2, 30)
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // Panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch03.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch03.s05_instruction')
+      sv.panel.appendChild(desc)
+
+      // Head selector buttons
+      const headBtns = document.createElement('div')
+      headBtns.style.cssText = 'display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap;'
+
+      const headDesc = document.createElement('p')
+      headDesc.textContent = heads[0].description
+      headDesc.style.cssText = 'color: var(--text-muted); font-size: 16px; margin-bottom: 20px;'
+
+      heads.forEach((head, i) => {
+        const btn = document.createElement('button')
+        btn.className = 'choice-card'
+        if (i === 0) btn.classList.add('selected')
+        btn.textContent = `Head ${i + 1}: ${head.name}`
+        btn.style.cssText = `font-size: 14px; padding: 8px 14px; border-color: ${headColors[i]};`
+        btn.addEventListener('click', () => {
+          headBtns.querySelectorAll('.choice-card').forEach(b => b.classList.remove('selected'))
+          btn.classList.add('selected')
+          activeHead = i
+          headDesc.textContent = head.description
+        })
+        headBtns.appendChild(btn)
+      })
+
+      sv.panel.appendChild(headBtns)
+      sv.panel.appendChild(headDesc)
+
+      const advBtn = document.createElement('button')
+      advBtn.className = 'scene-btn'
+      advBtn.textContent = ctx.i18n.t('ch03.s05_btn')
+      advBtn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+      sv.panel.appendChild(advBtn)
+
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
+    },
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
+    }
+  },
+
+  // Scene 4: Wrap-up
+  {
+    id: 'ch03-s04-wrapup',
     type: 'narrative',
     async enter(ctx) {
       await ctx.narrator.say('ch03.s06_text')
+      await sleep(800)
       await ctx.narrator.say('ch03.s06_text2')
       await ctx.narrator.ask('ch03.s06_text2', [
         { key: 'ch03.s06_btn', action: () => ctx.bus.emit('chapter:complete', 'ch03-attention') }
