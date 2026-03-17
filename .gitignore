@@ -15,10 +15,11 @@ Thumbs.db
 # Not ready for commit yet
 demos/
 docs/
-.claude/
 
 # Screenshots & temp
 *.png
 *.jpg
 /landing-*.png
 .superpowers/
+
+.playwright-mcp/
