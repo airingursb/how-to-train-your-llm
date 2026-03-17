@@ -161,6 +161,7 @@ export class Landing {
   // ── Public API ──────────────────────────────────────────────────────────────
 
   show() {
+    this._refreshButtons();
     this._container.classList.remove('hidden');
     this._startLoop();
   }
@@ -258,7 +259,31 @@ export class Landing {
     subtitle.textContent = subtitleText;
     this._overlay.appendChild(subtitle);
 
-    // Button section — varies based on progress
+    // Button area — populated (and refreshed) by _refreshButtons()
+    this._btnArea = document.createElement('div');
+    Object.assign(this._btnArea.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+    });
+    this._overlay.appendChild(this._btnArea);
+    this._refreshButtons();
+
+    // Event listeners
+    window.addEventListener('resize',     this._boundResize);
+    window.addEventListener('mousemove',  this._boundMouseMove);
+    window.addEventListener('mouseleave', this._boundMouseLeave);
+
+    // Initial sizing
+    this._resize();
+  }
+
+  // ── Private: Button refresh ─────────────────────────────────────────────────
+
+  _refreshButtons() {
+    if (!this._btnArea) return;
+    this._btnArea.innerHTML = '';
+
     const CHAPTER_IDS = ['ch00','ch01','ch02','ch03','ch04','ch05','ch06','ch07','ch08','ch09'];
     const completed   = this._state ? this._state.getCompletedChapters() : [];
     const allDone     = completed.length >= CHAPTER_IDS.length;
@@ -312,7 +337,7 @@ export class Landing {
         pointerEvents: 'none',
       });
       congrats.textContent = completeTitle;
-      this._overlay.appendChild(congrats);
+      this._btnArea.appendChild(congrats);
 
       const completeMsg = document.createElement('div');
       Object.assign(completeMsg.style, {
@@ -325,13 +350,13 @@ export class Landing {
         pointerEvents: 'none',
       });
       completeMsg.textContent = completeText;
-      this._overlay.appendChild(completeMsg);
+      this._btnArea.appendChild(completeMsg);
 
       const playAgainBtn = makeBtn(playAgainText, true);
       playAgainBtn.addEventListener('click', () => {
         this.onRestart?.();
       });
-      this._overlay.appendChild(playAgainBtn);
+      this._btnArea.appendChild(playAgainBtn);
     } else if (hasProg) {
       // Find the last completed chapter index and suggest next
       let lastIdx = -1;
@@ -350,13 +375,13 @@ export class Landing {
       continueBtn.addEventListener('click', () => {
         this.onContinue?.();
       });
-      this._overlay.appendChild(continueBtn);
+      this._btnArea.appendChild(continueBtn);
 
       const restartBtn = makeBtn(restartText, false);
       restartBtn.addEventListener('click', () => {
         this.onRestart?.();
       });
-      this._overlay.appendChild(restartBtn);
+      this._btnArea.appendChild(restartBtn);
     } else {
       // Fresh start
       const btnText = this._i18n ? this._i18n.t('landing.start') : "let's begin →";
@@ -364,16 +389,8 @@ export class Landing {
       btn.addEventListener('click', () => {
         this.onStart?.();
       });
-      this._overlay.appendChild(btn);
+      this._btnArea.appendChild(btn);
     }
-
-    // Event listeners
-    window.addEventListener('resize',     this._boundResize);
-    window.addEventListener('mousemove',  this._boundMouseMove);
-    window.addEventListener('mouseleave', this._boundMouseLeave);
-
-    // Initial sizing
-    this._resize();
   }
 
   // ── Private: Animation ──────────────────────────────────────────────────────

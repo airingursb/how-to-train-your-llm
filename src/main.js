@@ -74,6 +74,7 @@ async function boot() {
 
   bus.on('game:restart', async () => {
     landing.hide()
+    state.reset()
     await startChapter(0, ctx)
   })
 
