@@ -107,14 +107,14 @@ async function boot() {
 
   // 9. Sound toggle
   const soundToggle = document.getElementById('sound-toggle')
-  const soundLabel = document.getElementById('sound-label')
+  const soundMuteLine = document.getElementById('sound-mute-line')
   soundToggle.addEventListener('click', () => {
     if (audio.muted) {
       audio.unmute()
-      soundLabel.textContent = i18n.t('ui.sound_on')
+      soundMuteLine.style.display = 'none'
     } else {
       audio.mute()
-      soundLabel.textContent = i18n.t('ui.sound_off')
+      soundMuteLine.style.display = 'block'
     }
   })
 
@@ -139,11 +139,6 @@ async function boot() {
     state.setSetting('locale', 'zh')
     setLangUI('zh')
     bus.emit('locale:change', 'zh')
-  })
-
-  // Update static UI on locale change
-  i18n.onChange((locale) => {
-    soundLabel.textContent = audio.muted ? i18n.t('ui.sound_off') : i18n.t('ui.sound_on')
   })
 
   // Set initial state from saved preference
