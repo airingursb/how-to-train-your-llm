@@ -1,554 +1,394 @@
-import simData from './data/training-sim.json'
+import { createSplitView } from '../../helpers/split-view.js'
+import { createSandboxControls } from '../../helpers/sandbox-controls.js'
+import { createABCompare } from '../../helpers/ab-compare.js'
+import trainingData from './data/training-sim.json'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function injectCh05Style() {
-  if (document.getElementById('ch05-pretraining-style')) return
-  const style = document.createElement('style')
-  style.id = 'ch05-pretraining-style'
-  style.textContent = `
-    @keyframes ch05-blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-    .ch05-cursor::after {
-      content: '▋';
-      display: inline-block;
-      animation: ch05-blink 1s step-start infinite;
-      margin-left: 1px;
-    }
-    .ch05-data-btn {
-      transition: background 0.15s, border-color 0.15s, transform 0.1s;
-    }
-    .ch05-data-btn:hover {
-      transform: scale(1.04);
-    }
-    .ch05-seg-btn {
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-    }
-  `
-  document.head.appendChild(style)
-}
-
-async function typewrite(el, text, delay = 18) {
-  el.textContent = ''
-  for (let i = 0; i < text.length; i++) {
-    el.textContent += text[i]
-    await new Promise(r => setTimeout(r, delay))
-  }
-}
-
-// ─── Scenes ───────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 export default [
-
-  // ── Scene 1: Narrative intro ───────────────────────────────────────────────
+  // Scene 1: Training Control Room
   {
-    id: 'ch05-s01-intro',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch05.s01_text')
-      await new Promise(r => setTimeout(r, 600))
-      await ctx.narrator.say('ch05.s01_text2')
-      await ctx.narrator.ask('ch05.s01_text2', [
-        { key: 'ch05.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ── Scene 2: Interactive training sandbox ──────────────────────────────────
-  {
-    id: 'ch05-s02-sandbox',
+    id: 'ch05-s01-training',
     type: 'interactive',
     async enter(ctx) {
-      injectCh05Style()
-      const { i18n, bus } = ctx
-      const { dataSources, sampleOutputs, lossCurve } = simData
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let training = false
+      let lossPoints = []
+      let currentOutput = ''
+      let learningRate = 0.001
+      let modelSize = 12
 
-      // State
-      let selectedSources = new Set(['wikipedia'])
-      let lrIndex = 1   // 0=too small, 1=just right, 2=too big
-      let sizeIndex = 1 // 0=small, 1=medium, 2=large
-      let trainingStarted = false
-      let animationTimers = []
-
-      // ── Root wrapper ──
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch05-sandbox-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 94%; max-width: 820px;
-        display: flex; flex-direction: column; align-items: stretch; gap: 18px;
-      `
-
-      // ── Data source picker ──
-      const dataSection = document.createElement('div')
-      dataSection.style.cssText = `display: flex; flex-direction: column; gap: 10px;`
-
-      const dataLabel = document.createElement('div')
-      dataLabel.textContent = i18n.t('ch05.s02_data_label')
-      dataLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--text);
-      `
-
-      const dataRow = document.createElement('div')
-      dataRow.style.cssText = `display: flex; gap: 10px; flex-wrap: wrap;`
-
-      const dataButtons = dataSources.map(src => {
-        const btn = document.createElement('button')
-        btn.className = 'ch05-data-btn'
-        btn.innerHTML = `${src.icon} ${src.name}`
-        const updateStyle = (active) => {
-          btn.style.cssText = `
-            font-family: var(--font-hand); font-size: 15px;
-            padding: 8px 16px; border-radius: 20px; cursor: pointer;
-            border: 2.5px solid ${active ? 'var(--accent)' : 'var(--text)'};
-            background: ${active ? 'rgba(var(--accent-rgb,255,140,0), 0.18)' : 'transparent'};
-            color: var(--text);
-          `
-        }
-        updateStyle(selectedSources.has(src.id))
-        btn.addEventListener('click', () => {
-          if (trainingStarted) return
-          if (selectedSources.has(src.id)) {
-            if (selectedSources.size === 1) return // require at least 1
-            selectedSources.delete(src.id)
-          } else {
-            selectedSources.add(src.id)
-          }
-          updateStyle(selectedSources.has(src.id))
-        })
-        dataRow.appendChild(btn)
-        return { btn, src, updateStyle }
-      })
-
-      dataSection.appendChild(dataLabel)
-      dataSection.appendChild(dataRow)
-
-      // ── Hyperparameters ──
-      const hyperSection = document.createElement('div')
-      hyperSection.style.cssText = `display: flex; flex-direction: column; gap: 14px;`
-
-      // Learning rate: 3-position button group
-      const lrRow = document.createElement('div')
-      lrRow.style.cssText = `display: flex; flex-direction: column; gap: 8px;`
-      const lrLabel = document.createElement('div')
-      lrLabel.textContent = i18n.t('ch05.s02_lr_label')
-      lrLabel.style.cssText = `font-family: var(--font-hand); font-size: 17px; color: var(--text);`
-
-      const lrOptions = [
-        i18n.t('ch05.s02_lr_low'),
-        i18n.t('ch05.s02_lr_mid'),
-        i18n.t('ch05.s02_lr_high'),
+      const outputMilestones = [
+        { step: 0,  text: trainingData.sampleOutputs.step0 },
+        { step: 3,  text: trainingData.sampleOutputs.step100 },
+        { step: 6,  text: trainingData.sampleOutputs.step500 },
+        { step: 10, text: trainingData.sampleOutputs.step2000 },
+        { step: 14, text: trainingData.sampleOutputs.step5000 },
       ]
-      const lrBtnRow = document.createElement('div')
-      lrBtnRow.style.cssText = `display: flex; gap: 8px;`
-      const lrBtns = lrOptions.map((label, idx) => {
-        const btn = document.createElement('button')
-        btn.className = 'ch05-seg-btn'
-        btn.textContent = label
-        const updateLr = (active) => {
-          btn.style.cssText = `
-            font-family: var(--font-hand); font-size: 14px; padding: 6px 14px;
-            border-radius: 16px; cursor: pointer;
-            border: 2px solid ${active ? '#4A90D9' : 'var(--text)'};
-            background: ${active ? 'rgba(74,144,217,0.2)' : 'transparent'};
-            color: var(--text);
-          `
-        }
-        updateLr(idx === lrIndex)
-        btn.addEventListener('click', () => {
-          if (trainingStarted) return
-          lrIndex = idx
-          lrBtns.forEach((b, i) => b._update(i === idx))
-        })
-        btn._update = updateLr
-        lrBtnRow.appendChild(btn)
-        return btn
-      })
-      lrRow.appendChild(lrLabel)
-      lrRow.appendChild(lrBtnRow)
 
-      // Model size: 3-position button group
-      const sizeRow = document.createElement('div')
-      sizeRow.style.cssText = `display: flex; flex-direction: column; gap: 8px;`
-      const sizeLabel = document.createElement('div')
-      sizeLabel.textContent = i18n.t('ch05.s02_size_label')
-      sizeLabel.style.cssText = `font-family: var(--font-hand); font-size: 17px; color: var(--text);`
+      function getLoss(step) {
+        const baseLoss = trainingData.lossCurve[Math.min(step, trainingData.lossCurve.length - 1)]
+        const lrFactor = learningRate > 0.005 ? 1.3 + (step * 0.05)
+                       : learningRate < 0.0003 ? 0.95 : 1.0
+        const sizeFactor = modelSize === 6 ? 1.2 : modelSize === 24 ? 0.85 : 1.0
+        return Math.max(0.5, baseLoss * lrFactor * sizeFactor)
+      }
 
-      const sizeOptions = [
-        i18n.t('ch05.s02_size_small'),
-        i18n.t('ch05.s02_size_medium'),
-        i18n.t('ch05.s02_size_large'),
-      ]
-      const sizeBtnRow = document.createElement('div')
-      sizeBtnRow.style.cssText = `display: flex; gap: 8px;`
-      const sizeBtns = sizeOptions.map((label, idx) => {
-        const btn = document.createElement('button')
-        btn.className = 'ch05-seg-btn'
-        btn.textContent = label
-        const updateSize = (active) => {
-          btn.style.cssText = `
-            font-family: var(--font-hand); font-size: 14px; padding: 6px 14px;
-            border-radius: 16px; cursor: pointer;
-            border: 2px solid ${active ? '#50B478' : 'var(--text)'};
-            background: ${active ? 'rgba(80,180,120,0.2)' : 'transparent'};
-            color: var(--text);
-          `
-        }
-        updateSize(idx === sizeIndex)
-        btn.addEventListener('click', () => {
-          if (trainingStarted) return
-          sizeIndex = idx
-          sizeBtns.forEach((b, i) => b._update(i === idx))
-        })
-        btn._update = updateSize
-        sizeBtnRow.appendChild(btn)
-        return btn
-      })
-      sizeRow.appendChild(sizeLabel)
-      sizeRow.appendChild(sizeBtnRow)
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      hyperSection.appendChild(lrRow)
-      hyperSection.appendChild(sizeRow)
-
-      // ── Start button ──
-      const startBtn = document.createElement('button')
-      startBtn.className = 'narrator-btn'
-      startBtn.textContent = i18n.t('ch05.s02_start')
-      startBtn.style.alignSelf = 'flex-start'
-
-      // ── Training display (hidden until start) ──
-      const trainingDisplay = document.createElement('div')
-      trainingDisplay.style.cssText = `
-        display: none; flex-direction: column; gap: 14px;
-      `
-
-      // Step + loss counter row
-      const statsRow = document.createElement('div')
-      statsRow.style.cssText = `
-        display: flex; gap: 24px; align-items: baseline;
-      `
-      const stepLabel = document.createElement('div')
-      stepLabel.style.cssText = `font-family: var(--font-hand); font-size: 17px; color: var(--accent);`
-      const lossDisplay = document.createElement('div')
-      lossDisplay.style.cssText = `font-family: var(--font-hand); font-size: 17px; color: var(--text); opacity: 0.8;`
-      statsRow.appendChild(stepLabel)
-      statsRow.appendChild(lossDisplay)
-
-      // Loss curve canvas
-      const canvas = document.createElement('canvas')
-      canvas.width = 600
-      canvas.height = 180
-      canvas.style.cssText = `
-        width: 100%; height: auto; border-radius: 10px;
-        background: rgba(45,45,45,0.05);
-        border: 1.5px solid rgba(45,45,45,0.12);
-      `
-
-      // Model output area
-      const outputSection = document.createElement('div')
-      outputSection.style.cssText = `
-        background: rgba(45,45,45,0.05); border-radius: 10px;
-        padding: 14px 18px; border: 1.5px solid rgba(45,45,45,0.12);
-      `
-      const outputLabel = document.createElement('div')
-      outputLabel.textContent = i18n.t('ch05.s02_output_label')
-      outputLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 15px; color: var(--text);
-        opacity: 0.65; margin-bottom: 8px;
-      `
-      const outputText = document.createElement('div')
-      outputText.className = 'ch05-cursor'
-      outputText.style.cssText = `
-        font-family: var(--font-mono); font-size: 14px; color: var(--text);
-        line-height: 1.6; min-height: 22px;
-      `
-      outputSection.appendChild(outputLabel)
-      outputSection.appendChild(outputText)
-
-      // Advance button (hidden until done)
-      const advBtn = document.createElement('button')
-      advBtn.className = 'narrator-btn'
-      advBtn.textContent = i18n.t('ch05.s02_btn')
-      advBtn.style.display = 'none'
-      advBtn.style.alignSelf = 'flex-start'
-      advBtn.addEventListener('click', () => bus.emit('scene:advance'))
-
-      trainingDisplay.appendChild(statsRow)
-      trainingDisplay.appendChild(canvas)
-      trainingDisplay.appendChild(outputSection)
-      trainingDisplay.appendChild(advBtn)
-
-      // Assemble wrapper
-      wrapper.appendChild(dataSection)
-      wrapper.appendChild(hyperSection)
-      wrapper.appendChild(startBtn)
-      wrapper.appendChild(trainingDisplay)
-
-      document.getElementById('app').appendChild(wrapper)
-
-      // ── Draw loss curve ──
-      function drawCurve(points, maxPoints, diverge) {
-        const ctx2 = canvas.getContext('2d')
-        const W = canvas.width
-        const H = canvas.height
-        const pad = { top: 16, right: 20, bottom: 28, left: 42 }
-        const plotW = W - pad.left - pad.right
-        const plotH = H - pad.top - pad.bottom
-
-        ctx2.clearRect(0, 0, W, H)
+        // Loss curve area (top 55%)
+        const curveH = h * 0.55
+        const curveX = 50
+        const curveW = w - 70
 
         // Axes
-        ctx2.strokeStyle = 'rgba(100,100,100,0.25)'
-        ctx2.lineWidth = 1
-        ctx2.beginPath()
-        ctx2.moveTo(pad.left, pad.top)
-        ctx2.lineTo(pad.left, pad.top + plotH)
-        ctx2.lineTo(pad.left + plotW, pad.top + plotH)
-        ctx2.stroke()
+        c.strokeStyle = '#ddd'
+        c.lineWidth = 1
+        c.beginPath()
+        c.moveTo(curveX, 20)
+        c.lineTo(curveX, curveH)
+        c.lineTo(curveX + curveW, curveH)
+        c.stroke()
 
         // Y-axis labels
-        ctx2.fillStyle = 'rgba(100,100,100,0.6)'
-        ctx2.font = '11px monospace'
-        ctx2.textAlign = 'right'
-        const yMax = diverge ? 12 : 9
-        for (let v = 0; v <= yMax; v += 3) {
-          const y = pad.top + plotH - (v / yMax) * plotH
-          ctx2.fillText(v.toFixed(0), pad.left - 6, y + 4)
-          ctx2.strokeStyle = 'rgba(100,100,100,0.08)'
-          ctx2.beginPath()
-          ctx2.moveTo(pad.left, y)
-          ctx2.lineTo(pad.left + plotW, y)
-          ctx2.stroke()
+        c.font = '12px JetBrains Mono, monospace'
+        c.fillStyle = '#888'
+        c.textAlign = 'right'
+        c.fillText('Loss', curveX - 5, 30)
+        c.fillText('8.0', curveX - 5, 35)
+        c.fillText('0', curveX - 5, curveH - 2)
+
+        // X-axis label
+        c.textAlign = 'center'
+        c.fillText('Training Steps \u2192', curveX + curveW / 2, curveH + 18)
+
+        // Draw loss curve
+        if (lossPoints.length > 1) {
+          c.strokeStyle = '#4A90D9'
+          c.lineWidth = 2.5
+          c.beginPath()
+          lossPoints.forEach((loss, i) => {
+            const x = curveX + (i / 14) * curveW
+            const y = 25 + (1 - (loss - 0) / 9) * (curveH - 30)
+            if (i === 0) c.moveTo(x, y)
+            else c.lineTo(x, y)
+          })
+          c.stroke()
+
+          // Current loss indicator dot
+          const lastLoss = lossPoints[lossPoints.length - 1]
+          const lastX = curveX + ((lossPoints.length - 1) / 14) * curveW
+          const lastY = 25 + (1 - (lastLoss - 0) / 9) * (curveH - 30)
+          c.fillStyle = '#4A90D9'
+          c.beginPath()
+          c.arc(lastX, lastY, 5, 0, Math.PI * 2)
+          c.fill()
+          c.textAlign = 'left'
+          c.fillStyle = '#4A90D9'
+          c.fillText(lastLoss.toFixed(2), lastX + 10, lastY - 6)
         }
 
-        if (points.length < 2) return
+        // Model output area (bottom 40%)
+        const outY = curveH + 35
+        c.font = 'bold 13px JetBrains Mono, monospace'
+        c.fillStyle = '#888'
+        c.textAlign = 'left'
+        c.fillText(ctx.i18n.t('ch05.s02_output_label'), 20, outY)
 
-        // Curve
-        ctx2.strokeStyle = diverge ? '#ef4444' : '#4A90D9'
-        ctx2.lineWidth = 2.5
-        ctx2.lineJoin = 'round'
-        ctx2.beginPath()
-        points.forEach((pt, i) => {
-          const x = pad.left + (i / (maxPoints - 1)) * plotW
-          const y = pad.top + plotH - (Math.min(pt, yMax) / yMax) * plotH
-          if (i === 0) ctx2.moveTo(x, y)
-          else ctx2.lineTo(x, y)
+        c.font = '14px JetBrains Mono, monospace'
+        c.fillStyle = '#2D2D2D'
+        const words = currentOutput.split(' ')
+        let line = ''
+        let lineY = outY + 20
+        words.forEach(word => {
+          const test = line + word + ' '
+          if (c.measureText(test).width > w - 40) {
+            c.fillText(line.trim(), 20, lineY)
+            line = word + ' '
+            lineY += 20
+          } else {
+            line = test
+          }
         })
-        ctx2.stroke()
+        if (line.trim()) c.fillText(line.trim(), 20, lineY)
 
-        // Current point dot
-        const last = points[points.length - 1]
-        const lx = pad.left + ((points.length - 1) / (maxPoints - 1)) * plotW
-        const ly = pad.top + plotH - (Math.min(last, yMax) / yMax) * plotH
-        ctx2.fillStyle = diverge ? '#ef4444' : '#4A90D9'
-        ctx2.beginPath()
-        ctx2.arc(lx, ly, 4, 0, Math.PI * 2)
-        ctx2.fill()
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
       }
 
-      // ── Training animation ──
-      startBtn.addEventListener('click', () => {
-        if (trainingStarted) return
-        trainingStarted = true
-        startBtn.style.display = 'none'
-        trainingDisplay.style.display = 'flex'
+      // Panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch05.title')
+      sv.panel.appendChild(title)
 
-        const diverge = lrIndex === 2
-        const slowdown = lrIndex === 0
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch05.s01_text')
+      sv.panel.appendChild(desc)
 
-        // Build loss points
-        const baseCurve = lossCurve.map((v, i) => {
-          if (diverge) return v < 4 ? v * 0.8 : v * 1.4 + i * 0.6
-          if (slowdown) return v * 0.6 + (lossCurve[lossCurve.length - 1] * 0.4)
-          // size bonus
-          const sizeBonus = [0.15, 0, -0.12][sizeIndex]
-          return Math.max(1.5, v + sizeBonus)
-        })
-
-        const steps = [0, 100, 500, 2000, 5000]
-        const outputKeys = ['step0', 'step100', 'step500', 'step2000', 'step5000']
-
-        let curvePoints = []
-        const totalCurveFrames = baseCurve.length
-        let frameIdx = 0
-
-        const stepDelay = 380  // ms per curve point
-
-        function animateCurveFrame() {
-          if (frameIdx >= totalCurveFrames) {
-            // training complete
-            stepLabel.textContent = i18n.t('ch05.s02_complete')
-            lossDisplay.textContent = ''
-            advBtn.style.display = 'inline-block'
-            return
-          }
-
-          curvePoints.push(baseCurve[frameIdx])
-          const progress = frameIdx / (totalCurveFrames - 1)
-          const stepVal = Math.round(progress * 5000)
-          const lossVal = baseCurve[frameIdx].toFixed(2)
-
-          stepLabel.textContent = i18n.t('ch05.s02_step').replace('{{step}}', stepVal)
-          lossDisplay.textContent = i18n.t('ch05.s02_loss').replace('{{loss}}', lossVal)
-          drawCurve(curvePoints, totalCurveFrames, diverge)
-
-          // Determine which output stage we're at
-          const outputStageIdx = Math.min(
-            Math.floor(progress * outputKeys.length),
-            outputKeys.length - 1
-          )
-
-          if (frameIdx === 0 || outputStageIdx !== Math.floor(((frameIdx - 1) / (totalCurveFrames - 1)) * outputKeys.length)) {
-            const key = diverge ? 'step0' : outputKeys[outputStageIdx]
-            const text = simData.sampleOutputs[key]
-            // typewrite without awaiting — run concurrently with curve
-            typewrite(outputText, text, 14)
-          }
-
-          frameIdx++
-          const timer = setTimeout(animateCurveFrame, stepDelay)
-          animationTimers.push(timer)
+      const controls = createSandboxControls(sv.panel, {
+        controls: [
+          {
+            key: 'data',
+            label: ctx.i18n.t('ch05.s02_data_label'),
+            type: 'select',
+            value: 'wikipedia',
+            options: trainingData.dataSources.map(d => ({ label: d.icon + ' ' + d.name, value: d.id }))
+          },
+          {
+            key: 'lr',
+            label: ctx.i18n.t('ch05.s02_lr_label'),
+            type: 'slider',
+            min: 0.0001,
+            max: 0.01,
+            step: 0.0001,
+            value: 0.001
+          },
+          {
+            key: 'size',
+            label: ctx.i18n.t('ch05.s02_size_label'),
+            type: 'select',
+            value: 12,
+            options: [
+              { label: ctx.i18n.t('ch05.s02_size_small'),  value: 6 },
+              { label: ctx.i18n.t('ch05.s02_size_medium'), value: 12 },
+              { label: ctx.i18n.t('ch05.s02_size_large'),  value: 24 },
+            ]
+          },
+        ],
+        onChange: (key, value) => {
+          if (key === 'lr')   learningRate = parseFloat(value)
+          if (key === 'size') modelSize = parseInt(value)
         }
-
-        animateCurveFrame()
       })
 
-      return { wrapper, animationTimers }
+      const stepLabel = document.createElement('div')
+      stepLabel.className = 'score-badge'
+      stepLabel.style.margin = '12px 0'
+      sv.panel.appendChild(stepLabel)
+
+      const startBtn = document.createElement('button')
+      startBtn.className = 'scene-btn'
+      startBtn.textContent = ctx.i18n.t('ch05.s02_start')
+      sv.panel.appendChild(startBtn)
+
+      startBtn.addEventListener('click', async () => {
+        if (training) return
+        training = true
+        startBtn.disabled = true
+        startBtn.textContent = ctx.i18n.t('ch05.s02_step').replace('{{step}}', '0')
+        lossPoints = []
+        currentOutput = ''
+
+        for (let i = 0; i <= 14; i++) {
+          const loss = getLoss(i)
+          lossPoints.push(loss)
+          stepLabel.textContent =
+            ctx.i18n.t('ch05.s02_step').replace('{{step}}', i * 350) +
+            ' \u2014 ' +
+            ctx.i18n.t('ch05.s02_loss').replace('{{loss}}', loss.toFixed(2))
+
+          const milestone = outputMilestones.find(m => m.step === i)
+          if (milestone) currentOutput = milestone.text
+
+          await sleep(300)
+        }
+
+        stepLabel.textContent = ctx.i18n.t('ch05.s02_complete')
+        startBtn.textContent = ctx.i18n.t('ch05.s02_btn')
+        startBtn.disabled = false
+        startBtn.onclick = () => ctx.bus.emit('scene:advance')
+        training = false
+      })
+
+      draw()
+
+      return { sv, controls, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      // Cancel any pending animation timers
-      if (returnVal?.animationTimers) {
-        returnVal.animationTimers.forEach(t => clearTimeout(t))
-      }
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.controls?.destroy()
+      rv?.sv?.destroy()
     }
   },
 
-  // ── Scene 3: Narrative — loss explained ───────────────────────────────────
+  // Scene 2: Scaling Laws
   {
-    id: 'ch05-s03-loss',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch05.s03_text')
-      await ctx.narrator.ask('ch05.s03_text', [
-        { key: 'ch05.s03_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ── Scene 4: Narrative — scaling laws ─────────────────────────────────────
-  {
-    id: 'ch05-s04-scaling',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch05.s04_text')
-      await new Promise(r => setTimeout(r, 700))
-      await ctx.narrator.say('ch05.s04_text2')
-      await ctx.narrator.ask('ch05.s04_text2', [
-        { key: 'ch05.s04_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // ── Scene 5: Interactive — the BUT moment ─────────────────────────────────
-  {
-    id: 'ch05-s05-but',
+    id: 'ch05-s02-scaling',
     type: 'interactive',
     async enter(ctx) {
-      injectCh05Style()
-      const { i18n, bus, narrator } = ctx
-      const { pretrainedOutputs } = simData
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let progress = 0
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch05-but-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 720px;
-        display: flex; flex-direction: column; align-items: stretch; gap: 18px;
-      `
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
 
-      // Prompt box
-      const promptBox = document.createElement('div')
-      promptBox.style.cssText = `
-        padding: 14px 20px; border-radius: 12px;
-        background: rgba(var(--accent-rgb,255,140,0), 0.12);
-        border: 2px solid var(--accent);
-        font-family: var(--font-mono); font-size: 15px; color: var(--text);
-        line-height: 1.5;
-      `
-      const promptLabelEl = document.createElement('span')
-      promptLabelEl.style.cssText = `font-family: var(--font-hand); opacity: 0.7; margin-right: 8px;`
-      promptLabelEl.textContent = i18n.t('ch05.s05_prompt')
-      promptBox.appendChild(promptLabelEl)
+        const curveX = 50
+        const curveW = w - 70
+        const curveTop = 30
+        const curveBottom = h - 40
 
-      // Output box
-      const outputBox = document.createElement('div')
-      outputBox.style.cssText = `
-        padding: 18px 22px; border-radius: 12px;
-        background: rgba(45,45,45,0.05);
-        border: 1.5px solid rgba(45,45,45,0.15);
-        font-family: var(--font-mono); font-size: 14px; color: var(--text);
-        line-height: 1.7; min-height: 90px; white-space: pre-wrap;
-      `
-      outputBox.className = 'ch05-cursor'
+        // Axes
+        c.strokeStyle = '#ddd'
+        c.lineWidth = 1
+        c.beginPath()
+        c.moveTo(curveX, curveTop)
+        c.lineTo(curveX, curveBottom)
+        c.lineTo(curveX + curveW, curveBottom)
+        c.stroke()
 
-      // "keep going" label
-      const keepGoingLabel = document.createElement('div')
-      keepGoingLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 14px; color: var(--text);
-        opacity: 0.55; text-align: center; display: none;
-      `
-      keepGoingLabel.textContent = '↓  it just keeps going…'
+        c.font = '12px JetBrains Mono, monospace'
+        c.fillStyle = '#888'
+        c.textAlign = 'center'
+        c.fillText('Compute \u2192', curveX + curveW / 2, h - 10)
+        c.textAlign = 'right'
+        c.fillText('Loss', curveX - 5, curveTop + 10)
 
-      wrapper.appendChild(promptBox)
-      wrapper.appendChild(outputBox)
-      wrapper.appendChild(keepGoingLabel)
+        // 3 model curves: small (red), medium (blue), large (green)
+        const models = [
+          { name: ctx.i18n.t('ch05.s02_size_small'),  color: '#D4645C', offset:  1.5 },
+          { name: ctx.i18n.t('ch05.s02_size_medium'), color: '#4A90D9', offset:  0   },
+          { name: ctx.i18n.t('ch05.s02_size_large'),  color: '#5BA55B', offset: -1.2 },
+        ]
 
-      document.getElementById('app').appendChild(wrapper)
+        const points = 50
+        const drawn = Math.floor(progress * points)
 
-      // Typewrite the pretrained output — first part, then continuation
-      const fullText = pretrainedOutputs.writeEmail + '\n' + pretrainedOutputs.writeEmailContinued + '…'
-      await typewrite(outputBox, fullText, 22)
+        models.forEach(model => {
+          c.strokeStyle = model.color
+          c.lineWidth = 2.5
+          c.beginPath()
+          for (let i = 0; i <= drawn; i++) {
+            const t = i / points
+            const x = curveX + t * curveW
+            const loss = 3 + model.offset + 5 * Math.exp(-3 * t)
+            const y = curveTop + ((loss - 1) / 9) * (curveBottom - curveTop)
+            if (i === 0) c.moveTo(x, y)
+            else c.lineTo(x, y)
+          }
+          c.stroke()
 
-      // Show "keeps going" label
-      keepGoingLabel.style.display = 'block'
+          // Label at end of drawn curve
+          if (drawn > 0) {
+            const t = drawn / points
+            const x = curveX + t * curveW
+            const loss = 3 + model.offset + 5 * Math.exp(-3 * t)
+            const y = curveTop + ((loss - 1) / 9) * (curveBottom - curveTop)
+            c.fillStyle = model.color
+            c.textAlign = 'left'
+            c.font = '11px JetBrains Mono, monospace'
+            c.fillText(model.name, x + 8, y + 4)
+          }
+        })
 
-      // Remove cursor class once done
-      outputBox.classList.remove('ch05-cursor')
+        if (progress < 1) progress += 0.015
 
-      // Narrator explains the BUT
-      await new Promise(r => setTimeout(r, 500))
-      await narrator.say('ch05.s05_text')
-      await narrator.ask('ch05.s05_text', [
-        { key: 'ch05.s05_btn', action: () => bus.emit('scene:advance') }
-      ])
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
 
-      return { wrapper }
+      // Panel
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch05.title')
+      sv.panel.appendChild(title)
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch05.s04_text')
+      sv.panel.appendChild(desc)
+
+      const desc2 = document.createElement('p')
+      desc2.textContent = ctx.i18n.t('ch05.s04_text2')
+      sv.panel.appendChild(desc2)
+
+      const btn = document.createElement('button')
+      btn.className = 'scene-btn'
+      btn.textContent = ctx.i18n.t('ch05.s04_btn')
+      btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+      sv.panel.appendChild(btn)
+
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal, ctx) {
-      ctx?.narrator?.clear()
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // ── Scene 6: Narrative — transition to Act II ─────────────────────────────
+  // Scene 3: The BUT — A/B Compare
   {
-    id: 'ch05-s06-transition',
+    id: 'ch05-s03-but',
+    type: 'interactive',
+    async enter(ctx) {
+      const sv = createSplitView(document.getElementById('app'))
+      // No canvas needed — use the full width area via canvasWrap
+      sv.canvas.style.display = 'none'
+
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch05.title')
+      sv.panel.appendChild(title)
+
+      const prompt = document.createElement('p')
+      prompt.textContent = ctx.i18n.t('ch05.s05_prompt')
+      prompt.style.cssText = 'font-style: italic; color: var(--text-muted); margin-bottom: 16px;'
+      sv.panel.appendChild(prompt)
+
+      const ab = createABCompare(sv.canvasWrap, {
+        prompt: null,
+        responseA: {
+          label: 'Base Model',
+          text: trainingData.pretrainedOutputs.writeEmail +
+                '\n' + trainingData.pretrainedOutputs.writeEmailContinued + '...'
+        },
+        responseB: {
+          label: 'What you wanted',
+          text: 'Subject: Meeting Follow-up\n\nHi team,\n\nHere\'s a summary of today\'s meeting:\n- Q3 revenue is up 12%\n- New product launch on track\n- Next review: Thursday 2pm\n\nBest,\nSarah'
+        },
+        typewriter: true
+      })
+
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch05.s05_text')
+      desc.className = 'fade-in'
+      desc.style.marginTop = '16px'
+      sv.panel.appendChild(desc)
+
+      const btn = document.createElement('button')
+      btn.className = 'scene-btn'
+      btn.textContent = ctx.i18n.t('ch05.s05_btn')
+      btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+      sv.panel.appendChild(btn)
+
+      return { sv, ab }
+    },
+    exit(rv) {
+      rv?.ab?.destroy()
+      rv?.sv?.destroy()
+    }
+  },
+
+  // Scene 4: Wrap-up
+  {
+    id: 'ch05-s04-wrapup',
     type: 'narrative',
     async enter(ctx) {
       await ctx.narrator.say('ch05.s06_text')
-      await new Promise(r => setTimeout(r, 700))
+      await sleep(800)
       await ctx.narrator.say('ch05.s06_text2')
       await ctx.narrator.ask('ch05.s06_text2', [
         { key: 'ch05.s06_btn', action: () => ctx.bus.emit('chapter:complete', 'ch05-pretraining') }
@@ -557,5 +397,5 @@ export default [
     exit(_, ctx) {
       ctx?.narrator?.clear()
     }
-  },
+  }
 ]
