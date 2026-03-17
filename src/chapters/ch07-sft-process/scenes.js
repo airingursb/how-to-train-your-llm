@@ -1,391 +1,361 @@
-import tasksData from './data/annotation-tasks.json'
+import { createSplitView } from '../../helpers/split-view.js'
+import taskData from './data/annotation-tasks.json'
 
 export default [
-  // Scene 1: Narrative — intro to data annotation
+  // Scene 1: Annotation Lab
   {
-    id: 'ch07-s01-intro',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch07.s01_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch07.s01_text2')
-      await ctx.narrator.ask('ch07.s01_text2', [
-        { key: 'ch07.s01_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 2: Interactive — annotation role play
-  {
-    id: 'ch07-s02-annotate',
+    id: 'ch07-s01-annotate',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n } = ctx
-      const tasks = tasksData.tasks
-      let currentIndex = 0
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch07-annotate-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 780px;
-        display: flex; flex-direction: column; align-items: center; gap: 18px;
-      `
+      const tasks = taskData.tasks
+      let taskIdx = 0
+      let rankings = [] // responses in user-ranked order (index 0 = Best)
+      let revealed = false
 
-      // Round counter
+      // Canvas: visual ranking tracker
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
+
+        const task = tasks[taskIdx]
+
+        // Instruction ticket
+        c.fillStyle = 'rgba(74,144,217,0.1)'
+        c.fillRect(20, 16, w - 40, 52)
+        c.strokeStyle = '#4A90D9'
+        c.lineWidth = 1.5
+        c.strokeRect(20, 16, w - 40, 52)
+        c.font = '13px JetBrains Mono, monospace'
+        c.fillStyle = '#4A90D9'
+        c.textAlign = 'center'
+        c.fillText('📋 ' + task.instruction, w / 2, 48, w - 60)
+
+        // Ranking slots
+        const slotLabels = [
+          ctx.i18n.t('ch07.s02_rank_best'),
+          ctx.i18n.t('ch07.s02_rank_ok'),
+          ctx.i18n.t('ch07.s02_rank_worst'),
+        ]
+        const slotColors = ['#5BA55B', '#E8913A', '#D4645C']
+
+        slotLabels.forEach((label, i) => {
+          const y = 90 + i * 72
+          const slotH = 60
+
+          // Slot background
+          c.fillStyle = slotColors[i] + '18'
+          c.fillRect(20, y, w - 40, slotH)
+          c.strokeStyle = slotColors[i]
+          c.lineWidth = revealed && rankings[i] ? 2.5 : 1
+          c.strokeRect(20, y, w - 40, slotH)
+
+          if (rankings[i]) {
+            const resp = rankings[i]
+            const preview = resp.text.substring(0, 55) + (resp.text.length > 55 ? '…' : '')
+            c.font = '12px JetBrains Mono, monospace'
+            c.fillStyle = '#2D2D2D'
+            c.textAlign = 'left'
+            c.fillText(preview, 30, y + 26, w - 70)
+
+            if (revealed) {
+              const icon = resp.quality === 'good' ? '✓' : resp.quality === 'ok' ? '⚠' : '✗'
+              const iconColor = resp.quality === 'good' ? '#5BA55B' : resp.quality === 'ok' ? '#E8913A' : '#D4645C'
+              c.font = 'bold 18px sans-serif'
+              c.fillStyle = iconColor
+              c.textAlign = 'right'
+              c.fillText(icon, w - 28, y + 38)
+
+              // Reason text
+              c.font = '11px JetBrains Mono, monospace'
+              c.fillStyle = iconColor
+              c.textAlign = 'left'
+              c.fillText(resp.reason, 30, y + 46, w - 70)
+            }
+          } else {
+            // Empty slot label
+            c.font = '15px Caveat, cursive'
+            c.fillStyle = slotColors[i]
+            c.textAlign = 'center'
+            c.fillText((i + 1) + '. ' + label, w / 2, y + 36)
+          }
+        })
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // ── Panel ──────────────────────────────────────────────
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch07.title')
+      sv.panel.appendChild(title)
+
       const roundLabel = document.createElement('div')
-      roundLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--accent);
-        letter-spacing: 0.05em; align-self: flex-start;
-      `
+      roundLabel.className = 'score-badge'
+      sv.panel.appendChild(roundLabel)
 
-      // Rank instruction
-      const rankInstruction = document.createElement('div')
-      rankInstruction.textContent = i18n.t('ch07.s02_rank_instruction')
-      rankInstruction.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--text);
-        text-align: center;
-      `
+      const instrEl = document.createElement('p')
+      instrEl.style.cssText = 'font-style: italic; color: var(--accent); margin: 8px 0;'
+      sv.panel.appendChild(instrEl)
 
-      // Instruction box
-      const instructionBox = document.createElement('div')
-      instructionBox.style.cssText = `
-        width: 100%; padding: 14px 20px; border-radius: 10px;
-        background: rgba(var(--accent-rgb, 255,140,0), 0.12);
-        border: 2px solid var(--accent);
-        display: flex; flex-direction: column; gap: 6px;
-      `
+      const desc = document.createElement('p')
+      desc.textContent = ctx.i18n.t('ch07.s02_rank_instruction')
+      sv.panel.appendChild(desc)
 
-      const instructionLabel = document.createElement('div')
-      instructionLabel.textContent = i18n.t('ch07.s02_instruction_label')
-      instructionLabel.style.cssText = `
-        font-family: var(--font-hand); font-size: 14px; color: var(--accent);
-        font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
-      `
+      const cardsDiv = document.createElement('div')
+      cardsDiv.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin: 12px 0;'
+      sv.panel.appendChild(cardsDiv)
 
-      const instructionText = document.createElement('div')
-      instructionText.style.cssText = `
-        font-family: var(--font-hand); font-size: 18px; color: var(--text);
-        line-height: 1.5;
-      `
+      const feedbackEl = document.createElement('p')
+      feedbackEl.style.cssText = 'font-size: 15px; color: var(--text-muted); min-height: 40px; white-space: pre-wrap;'
+      sv.panel.appendChild(feedbackEl)
 
-      instructionBox.appendChild(instructionLabel)
-      instructionBox.appendChild(instructionText)
+      function renderTask() {
+        revealed = false
+        rankings = []
 
-      // Cards container
-      const cardsContainer = document.createElement('div')
-      cardsContainer.style.cssText = `
-        display: flex; flex-direction: column; gap: 12px; width: 100%;
-      `
+        // Remove any leftover next button
+        const oldBtn = sv.panel.querySelector('.scene-btn')
+        if (oldBtn) oldBtn.remove()
 
-      // Feedback area
-      const feedback = document.createElement('div')
-      feedback.style.cssText = `
-        font-family: var(--font-hand); font-size: 17px; color: var(--text);
-        text-align: center; min-height: 26px;
-      `
-
-      // Next button
-      const nextBtn = document.createElement('button')
-      nextBtn.className = 'narrator-btn'
-      nextBtn.style.display = 'none'
-
-      wrapper.appendChild(roundLabel)
-      wrapper.appendChild(rankInstruction)
-      wrapper.appendChild(instructionBox)
-      wrapper.appendChild(cardsContainer)
-      wrapper.appendChild(feedback)
-      wrapper.appendChild(nextBtn)
-      document.getElementById('app').appendChild(wrapper)
-
-      const qualityOrder = { good: 1, ok: 2, bad: 3 }
-      const rankColors = ['#22c55e', '#eab308', '#ef4444']
-      const rankLabels = [
-        i18n.t('ch07.s02_rank_best'),
-        i18n.t('ch07.s02_rank_ok'),
-        i18n.t('ch07.s02_rank_worst'),
-      ]
-
-      const renderRound = () => {
-        const task = tasks[currentIndex]
-        let rankCount = 0
-        let revealed = false
-
-        roundLabel.textContent = i18n.t('ch07.s02_round', {
-          current: currentIndex + 1,
+        const task = tasks[taskIdx]
+        roundLabel.textContent = ctx.i18n.t('ch07.s02_round', {
+          current: taskIdx + 1,
           total: tasks.length,
         })
-        instructionText.textContent = task.instruction
-        feedback.textContent = ''
-        nextBtn.style.display = 'none'
-        cardsContainer.innerHTML = ''
+        instrEl.textContent = ctx.i18n.t('ch07.s02_instruction_label') + ' ' + task.instruction
+        feedbackEl.textContent = ''
+        cardsDiv.innerHTML = ''
 
         // Shuffle responses for display
         const shuffled = [...task.responses].sort(() => Math.random() - 0.5)
-        const playerRanking = []
 
-        const cardObjs = shuffled.map((resp) => {
-          const isCode = resp.text.includes('\n') && (resp.text.includes('def ') || resp.text.includes('return '))
-
+        shuffled.forEach(resp => {
           const card = document.createElement('div')
-          card.style.cssText = `
-            width: 100%; padding: 16px 20px; border-radius: 10px;
-            border: 2.5px solid var(--text); cursor: pointer;
-            background: var(--bg); box-sizing: border-box;
-            transition: border-color 0.15s, box-shadow 0.15s;
-            display: flex; flex-direction: column; gap: 8px; position: relative;
-          `
-
-          const responseText = document.createElement(isCode ? 'pre' : 'div')
-          responseText.style.cssText = isCode
-            ? `margin: 0; white-space: pre-wrap; word-break: break-word;
-               font-family: var(--font-mono); font-size: 14px; line-height: 1.6; color: var(--text);`
-            : `font-family: var(--font-hand); font-size: 16px; line-height: 1.6; color: var(--text);`
-          responseText.textContent = resp.text
-
-          // Rank badge (shown after player clicks)
-          const rankBadge = document.createElement('div')
-          rankBadge.style.cssText = `
-            position: absolute; top: -10px; right: -10px;
-            width: 28px; height: 28px; border-radius: 50%;
-            display: none; align-items: center; justify-content: center;
-            font-family: var(--font-hand); font-size: 15px; font-weight: bold;
-            color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-          `
-
-          // Quality reveal (shown after reveal)
-          const qualityReveal = document.createElement('div')
-          qualityReveal.style.cssText = `
-            font-family: var(--font-hand); font-size: 14px; line-height: 1.5;
-            display: none; margin-top: 4px; padding-top: 8px;
-            border-top: 1px dashed rgba(128,128,128,0.3);
-          `
-
-          card.appendChild(responseText)
-          card.appendChild(rankBadge)
-          card.appendChild(qualityReveal)
-
-          card.addEventListener('mouseenter', () => {
-            if (!revealed && !card._ranked) card.style.borderColor = 'var(--accent)'
-          })
-          card.addEventListener('mouseleave', () => {
-            if (!revealed && !card._ranked) card.style.borderColor = 'var(--text)'
-          })
-
-          card._resp = resp
-          card._rankBadge = rankBadge
-          card._qualityReveal = qualityReveal
-          card._ranked = false
+          card.className = 'choice-card'
+          card.style.cssText = 'text-align: left; font-size: 14px; white-space: pre-wrap; padding: 10px 14px; cursor: pointer;'
+          card.textContent = resp.text
 
           card.addEventListener('click', () => {
-            if (revealed || card._ranked) return
-            card._ranked = true
-            const rank = rankCount
-            rankCount++
+            if (revealed || rankings.includes(resp)) return
+            rankings.push(resp)
 
-            playerRanking.push({ resp, rank })
+            const rankNum = rankings.length
+            card.classList.add('selected')
+            card.style.opacity = '0.55'
 
-            card.style.borderColor = rankColors[rank]
-            card.style.cursor = 'default'
-            rankBadge.textContent = rank + 1
-            rankBadge.style.background = rankColors[rank]
-            rankBadge.style.display = 'flex'
+            const prefix = document.createElement('span')
+            prefix.textContent = rankNum === 1 ? '#1 ' : rankNum === 2 ? '#2 ' : '#3 '
+            prefix.style.cssText = 'font-weight: bold; color: var(--accent);'
+            card.prepend(prefix)
 
-            if (rankCount === task.responses.length) {
-              revealResults()
+            if (rankings.length === task.responses.length) {
+              revealResults(task)
             }
           })
 
-          cardsContainer.appendChild(card)
-          return card
+          cardsDiv.appendChild(card)
         })
-
-        const revealResults = () => {
-          revealed = true
-
-          // Check if player ranking matches quality order
-          const sortedByQuality = [...playerRanking].sort(
-            (a, b) => qualityOrder[a.resp.quality] - qualityOrder[b.resp.quality]
-          )
-          const matched = playerRanking.every(
-            (item, i) => item.resp.quality === sortedByQuality[i].resp.quality
-          )
-
-          feedback.textContent = matched
-            ? i18n.t('ch07.s02_matched')
-            : i18n.t('ch07.s02_different')
-          feedback.style.color = matched ? '#22c55e' : 'var(--accent)'
-
-          // Reveal quality labels on each card
-          cardObjs.forEach((card) => {
-            const resp = card._resp
-            const qOrder = qualityOrder[resp.quality]
-            const color = rankColors[qOrder - 1]
-            const label = rankLabels[qOrder - 1]
-
-            card.style.borderColor = color
-            card._qualityReveal.innerHTML = `<span style="color:${color}; font-weight:bold;">${label}</span> — ${resp.reason}`
-            card._qualityReveal.style.display = 'block'
-          })
-
-          const isLast = currentIndex === tasks.length - 1
-          nextBtn.textContent = isLast
-            ? i18n.t('ch07.s02_next').replace('→', '✓')
-            : i18n.t('ch07.s02_next')
-          nextBtn.style.display = 'inline-block'
-
-          nextBtn.onclick = () => {
-            currentIndex++
-            if (currentIndex >= tasks.length) {
-              bus.emit('scene:advance')
-            } else {
-              renderRound()
-            }
-          }
-        }
       }
 
-      renderRound()
+      function revealResults(task) {
+        revealed = true
 
-      return { wrapper }
+        // Check if user ranking matches expert order (good → ok → bad)
+        const expertOrder = ['good', 'ok', 'bad']
+        const userOrder = rankings.map(r => r.quality)
+        const matched = JSON.stringify(userOrder) === JSON.stringify(expertOrder)
+
+        let fb = matched ? ctx.i18n.t('ch07.s02_matched') : ctx.i18n.t('ch07.s02_different')
+        rankings.forEach((r, i) => {
+          const posLabel = i === 0 ? ctx.i18n.t('ch07.s02_rank_best')
+            : i === 1 ? ctx.i18n.t('ch07.s02_rank_ok')
+            : ctx.i18n.t('ch07.s02_rank_worst')
+          fb += '\n' + posLabel + ': ' + r.reason
+        })
+        feedbackEl.textContent = fb
+        feedbackEl.className = 'fade-in'
+
+        const nextBtn = document.createElement('button')
+        nextBtn.className = 'scene-btn fade-in'
+        nextBtn.style.marginTop = '8px'
+
+        if (taskIdx < tasks.length - 1) {
+          nextBtn.textContent = ctx.i18n.t('ch07.s02_next')
+          nextBtn.addEventListener('click', () => {
+            taskIdx++
+            nextBtn.remove()
+            renderTask()
+          })
+        } else {
+          nextBtn.textContent = ctx.i18n.t('ch07.s04_btn')
+          nextBtn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+        }
+
+        sv.panel.appendChild(nextBtn)
+      }
+
+      renderTask()
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 3: Narrative — data quality > quantity
+  // Scene 2: Disagreement
   {
-    id: 'ch07-s03-quality',
-    type: 'narrative',
-    async enter(ctx) {
-      await ctx.narrator.say('ch07.s03_text')
-      await new Promise(r => setTimeout(r, 800))
-      await ctx.narrator.say('ch07.s03_text2')
-      await ctx.narrator.ask('ch07.s03_text2', [
-        { key: 'ch07.s03_btn', action: () => ctx.bus.emit('scene:advance') }
-      ])
-    },
-    exit(_, ctx) {
-      ctx?.narrator?.clear()
-    }
-  },
-
-  // Scene 4: Interactive — annotator disagreement
-  {
-    id: 'ch07-s04-disagree',
+    id: 'ch07-s02-disagree',
     type: 'interactive',
     async enter(ctx) {
-      const { bus, i18n, narrator } = ctx
-      const { disagreement } = tasksData
+      const sv = createSplitView(document.getElementById('app'))
+      const { canvas, ctx: c } = sv
+      const dpr = devicePixelRatio
+      let animFrame = null
+      let t = 0
 
-      const wrapper = document.createElement('div')
-      wrapper.id = 'ch07-disagree-ui'
-      wrapper.style.cssText = `
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        z-index: 15; width: 92%; max-width: 900px;
-        display: flex; flex-direction: column; align-items: center; gap: 20px;
-      `
+      const { disagreement } = taskData
+      const annotators = [
+        { ...disagreement.annotator1, color: '#4A90D9' },
+        { ...disagreement.annotator2, color: '#5BA55B' },
+        { ...disagreement.annotator3, color: '#E8913A' },
+      ]
 
-      // Narrator text at top
-      const introText = document.createElement('div')
-      introText.textContent = i18n.t('ch07.s04_text')
-      introText.style.cssText = `
-        font-family: var(--font-hand); font-size: 19px; color: var(--text);
-        text-align: center; max-width: 640px; line-height: 1.6;
-      `
+      function wrapText(text, maxW) {
+        const words = text.split(' ')
+        const lines = []
+        let line = ''
+        words.forEach(word => {
+          const test = line + word + ' '
+          if (test.length * 6.2 > maxW) {
+            lines.push(line.trim())
+            line = word + ' '
+          } else {
+            line = test
+          }
+        })
+        if (line.trim()) lines.push(line.trim())
+        return lines
+      }
 
-      // Ethical question box
-      const questionBox = document.createElement('div')
-      questionBox.style.cssText = `
-        width: 100%; padding: 14px 20px; border-radius: 10px;
-        background: rgba(var(--accent-rgb, 255,140,0), 0.12);
-        border: 2px solid var(--accent);
-        font-family: var(--font-hand); font-size: 20px; color: var(--text);
-        text-align: center; line-height: 1.5;
-      `
-      questionBox.innerHTML = `<span style="color:var(--accent); font-size:13px; font-weight:bold; text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:6px;">${i18n.t('ch07.s02_instruction_label')}</span>${disagreement.instruction}`
+      function draw() {
+        const w = canvas.width / dpr
+        const h = canvas.height / dpr
+        c.save()
+        c.scale(dpr, dpr)
+        c.clearRect(0, 0, w, h)
+        t++
 
-      // Annotator panels row
-      const panelsRow = document.createElement('div')
-      panelsRow.style.cssText = `
-        display: flex; flex-direction: row; gap: 16px; width: 100%;
-      `
+        // Question at top
+        c.font = 'bold 13px JetBrains Mono, monospace'
+        c.fillStyle = '#888'
+        c.textAlign = 'center'
+        c.fillText('"' + disagreement.instruction + '"', w / 2, 28, w - 20)
 
-      const annotators = [disagreement.annotator1, disagreement.annotator2, disagreement.annotator3]
-      const panelColors = ['#818cf8', '#34d399', '#f472b6']
+        // 3 annotator cards side by side
+        const cardGap = 10
+        const cardW = (w - 30 - cardGap * 2) / 3
+        const cardY = 46
+        const cardH = h - cardY - 16
 
-      annotators.forEach((ann, idx) => {
-        const panel = document.createElement('div')
-        panel.style.cssText = `
-          flex: 1; padding: 18px; border-radius: 12px;
-          border: 2.5px solid ${panelColors[idx]};
-          background: var(--bg);
-          display: flex; flex-direction: column; gap: 10px;
-        `
+        annotators.forEach((ann, i) => {
+          const cardX = 15 + i * (cardW + cardGap)
 
-        const name = document.createElement('div')
-        name.textContent = ann.name
-        name.style.cssText = `
-          font-family: var(--font-hand); font-size: 18px; font-weight: bold;
-          color: ${panelColors[idx]};
-        `
+          // Pulsing border
+          const pulse = 0.45 + Math.sin(t * 0.025 + i * 2.1) * 0.35
+          const alpha = Math.floor(pulse * 255).toString(16).padStart(2, '0')
 
-        const pick = document.createElement('div')
-        pick.textContent = `"${ann.pick}"`
-        pick.style.cssText = `
-          font-family: var(--font-hand); font-size: 14px; line-height: 1.6;
-          color: var(--text); font-style: italic; flex: 1;
-        `
+          c.fillStyle = ann.color + '12'
+          c.fillRect(cardX, cardY, cardW, cardH)
 
-        const reasoning = document.createElement('div')
-        reasoning.textContent = ann.reasoning
-        reasoning.style.cssText = `
-          font-family: var(--font-hand); font-size: 13px;
-          color: ${panelColors[idx]}; opacity: 0.85;
-          padding-top: 8px; border-top: 1px dashed rgba(128,128,128,0.3);
-        `
+          c.strokeStyle = ann.color + alpha
+          c.lineWidth = 3
+          c.strokeRect(cardX, cardY, cardW, cardH)
 
-        panel.appendChild(name)
-        panel.appendChild(pick)
-        panel.appendChild(reasoning)
-        panelsRow.appendChild(panel)
-      })
+          // Avatar circle
+          const cx = cardX + cardW / 2
+          const avatarY = cardY + 28
+          c.fillStyle = ann.color
+          c.beginPath()
+          c.arc(cx, avatarY, 18, 0, Math.PI * 2)
+          c.fill()
 
-      // Bottom question
-      const bottomText = document.createElement('div')
-      bottomText.textContent = i18n.t('ch07.s04_question')
-      bottomText.style.cssText = `
-        font-family: var(--font-hand); font-size: 19px; color: var(--text);
-        text-align: center; line-height: 1.6;
-      `
+          c.font = 'bold 15px sans-serif'
+          c.fillStyle = '#fff'
+          c.textAlign = 'center'
+          c.fillText(ann.name[0], cx, avatarY + 6)
 
-      // Button
-      const advanceBtn = document.createElement('button')
-      advanceBtn.className = 'narrator-btn'
-      advanceBtn.textContent = i18n.t('ch07.s04_btn')
-      advanceBtn.onclick = () => bus.emit('scene:advance')
+          // Name
+          c.font = 'bold 14px Caveat, cursive'
+          c.fillStyle = ann.color
+          c.fillText(ann.name, cx, avatarY + 42)
 
-      wrapper.appendChild(introText)
-      wrapper.appendChild(questionBox)
-      wrapper.appendChild(panelsRow)
-      wrapper.appendChild(bottomText)
-      wrapper.appendChild(advanceBtn)
-      document.getElementById('app').appendChild(wrapper)
+          // Pick text
+          c.font = '10px JetBrains Mono, monospace'
+          c.fillStyle = '#555'
+          const lines = wrapText(ann.pick, cardW - 14)
+          lines.slice(0, 6).forEach((line, li) => {
+            c.fillText(line, cx, avatarY + 62 + li * 15, cardW - 14)
+          })
 
-      return { wrapper }
+          // Reasoning tag at bottom
+          c.font = 'italic 10px JetBrains Mono, monospace'
+          c.fillStyle = ann.color
+          c.fillText(ann.reasoning, cx, cardY + cardH - 12, cardW - 14)
+        })
+
+        c.restore()
+        animFrame = requestAnimationFrame(draw)
+      }
+
+      // ── Panel ──────────────────────────────────────────────
+      const title = document.createElement('h2')
+      title.textContent = ctx.i18n.t('ch07.title')
+      sv.panel.appendChild(title)
+
+      const q = document.createElement('p')
+      q.textContent = ctx.i18n.t('ch07.s04_text')
+      sv.panel.appendChild(q)
+
+      const q2 = document.createElement('p')
+      q2.textContent = ctx.i18n.t('ch07.s04_question')
+      q2.style.cssText = 'font-weight: bold; color: var(--accent);'
+      sv.panel.appendChild(q2)
+
+      const answer = document.createElement('p')
+      answer.textContent = "Who's right? Nobody — that's the point. Annotators bring their own values and perspectives. SFT can only teach the model to mimic examples. It can't resolve genuine disagreements about what 'good' means."
+      answer.style.cssText = 'font-size: 14px; color: var(--text-muted); margin-top: 8px;'
+      sv.panel.appendChild(answer)
+
+      const btn = document.createElement('button')
+      btn.className = 'scene-btn'
+      btn.textContent = ctx.i18n.t('ch07.s04_btn')
+      btn.addEventListener('click', () => ctx.bus.emit('scene:advance'))
+      sv.panel.appendChild(btn)
+
+      draw()
+
+      return { sv, getAnimFrame: () => animFrame }
     },
-    exit(returnVal) {
-      returnVal?.wrapper?.remove()
+    exit(rv) {
+      cancelAnimationFrame(rv?.getAnimFrame?.())
+      rv?.sv?.destroy()
     }
   },
 
-  // Scene 5: Narrative — the BUT + transition to Act III
+  // Scene 3: Wrap-up
   {
-    id: 'ch07-s05-but',
+    id: 'ch07-s03-wrapup',
     type: 'narrative',
     async enter(ctx) {
       await ctx.narrator.say('ch07.s05_text')
